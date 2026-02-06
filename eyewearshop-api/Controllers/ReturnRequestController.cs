@@ -28,6 +28,9 @@ public class ReturnRequestController : ControllerBase
 
     public record ReturnRequestItemDto(long OrderItemId, int Quantity);
 
+    /// <summary>
+    /// List the current user's return requests (exchange/return/warranty) with optional filtering and pagination.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult> GetMyReturnRequests(
         [FromQuery] string? requestType,
@@ -94,6 +97,9 @@ public class ReturnRequestController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Get a single return request detail for the current user.
+    /// </summary>
     [HttpGet("{returnRequestId:long}")]
     public async Task<ActionResult> GetReturnRequestDetail([FromRoute] long returnRequestId, CancellationToken ct)
     {
@@ -155,6 +161,9 @@ public class ReturnRequestController : ControllerBase
         return Ok(request);
     }
 
+    /// <summary>
+    /// Create a new return request for an order (order must be Delivered/Completed).
+    /// </summary>
     [HttpPost]
     public async Task<ActionResult> CreateReturnRequest([FromBody] CreateReturnRequestRequest request, CancellationToken ct)
     {

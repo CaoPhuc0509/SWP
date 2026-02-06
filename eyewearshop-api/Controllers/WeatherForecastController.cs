@@ -18,6 +18,9 @@ namespace eyewearshop_api.Controllers
             _logger = logger;
         }
 
+        /// <summary>
+        /// Sample template endpoint (not part of the eyewear business APIs).
+        /// </summary>
         [HttpGet(Name = "GetWeatherForecast")]
         public IEnumerable<WeatherForecast> Get()
         {

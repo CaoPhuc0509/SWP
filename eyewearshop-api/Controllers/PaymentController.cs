@@ -26,6 +26,9 @@ public class PaymentController : ControllerBase
         decimal Amount,
         string? Note);
 
+    /// <summary>
+    /// List payments for a specific order (must belong to current user).
+    /// </summary>
     [HttpGet("order/{orderId:long}")]
     public async Task<ActionResult> GetOrderPayments([FromRoute] long orderId, CancellationToken ct)
     {
@@ -57,6 +60,9 @@ public class PaymentController : ControllerBase
         return Ok(payments);
     }
 
+    /// <summary>
+    /// Create a payment record for an order (simplified; no real gateway integration).
+    /// </summary>
     [HttpPost]
     public async Task<ActionResult> CreatePayment([FromBody] CreatePaymentRequest request, CancellationToken ct)
     {
@@ -124,6 +130,9 @@ public class PaymentController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Confirm a payment (simulates gateway confirmation).
+    /// </summary>
     [HttpPut("{paymentId:long}/confirm")]
     public async Task<ActionResult> ConfirmPayment([FromRoute] long paymentId, CancellationToken ct)
     {
@@ -165,6 +174,9 @@ public class PaymentController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Get a single payment detail (must belong to current user).
+    /// </summary>
     [HttpGet("{paymentId:long}")]
     public async Task<ActionResult> GetPayment([FromRoute] long paymentId, CancellationToken ct)
     {

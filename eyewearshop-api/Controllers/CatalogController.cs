@@ -15,6 +15,9 @@ public class CatalogController : ControllerBase
         _db = db;
     }
 
+    /// <summary>
+    /// List active product categories for filters/navigation.
+    /// </summary>
     [HttpGet("categories")]
     public async Task<ActionResult> GetCategories(CancellationToken ct)
     {
@@ -28,6 +31,9 @@ public class CatalogController : ControllerBase
         return Ok(categories);
     }
 
+    /// <summary>
+    /// List active brands for filters/navigation.
+    /// </summary>
     [HttpGet("brands")]
     public async Task<ActionResult> GetBrands(CancellationToken ct)
     {
@@ -41,6 +47,10 @@ public class CatalogController : ControllerBase
         return Ok(brands);
     }
 
+    /// <summary>
+    /// Search/browse products with filtering and pagination.
+    /// Supports filtering by product type, category, brand, variant color, price range, and frame dimensions (A/B/DBL).
+    /// </summary>
     [HttpGet("products")]
     public async Task<ActionResult> GetProducts(
         [FromQuery] string? q,
@@ -170,6 +180,9 @@ public class CatalogController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Get a single product with variants, images, and type-specific specifications.
+    /// </summary>
     [HttpGet("products/{productId:long}")]
     public async Task<ActionResult> GetProductDetail([FromRoute] long productId, CancellationToken ct)
     {

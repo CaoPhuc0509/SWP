@@ -25,6 +25,9 @@ public class AccountController : ControllerBase
         string? Gender,
         DateOnly? DateOfBirth);
 
+    /// <summary>
+    /// Get the current authenticated user's profile (including role).
+    /// </summary>
     [HttpGet("profile")]
     public async Task<ActionResult> GetProfile(CancellationToken ct)
     {
@@ -53,6 +56,9 @@ public class AccountController : ControllerBase
         return Ok(user);
     }
 
+    /// <summary>
+    /// Update the current authenticated user's profile fields.
+    /// </summary>
     [HttpPut("profile")]
     public async Task<ActionResult> UpdateProfile([FromBody] UpdateProfileRequest request, CancellationToken ct)
     {
@@ -89,6 +95,9 @@ public class AccountController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// List active saved shipping addresses of the current user.
+    /// </summary>
     [HttpGet("addresses")]
     public async Task<ActionResult> GetAddresses(CancellationToken ct)
     {
@@ -115,6 +124,9 @@ public class AccountController : ControllerBase
         return Ok(addresses);
     }
 
+    /// <summary>
+    /// Get a single saved shipping address by id (must belong to current user).
+    /// </summary>
     [HttpGet("addresses/{addressId:long}")]
     public async Task<ActionResult> GetAddress([FromRoute] long addressId, CancellationToken ct)
     {
@@ -142,6 +154,9 @@ public class AccountController : ControllerBase
         return Ok(address);
     }
 
+    /// <summary>
+    /// Create a new saved shipping address for the current user.
+    /// </summary>
     [HttpPost("addresses")]
     public async Task<ActionResult> CreateAddress([FromBody] CreateAddressRequest request, CancellationToken ct)
     {
@@ -187,6 +202,9 @@ public class AccountController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Update an existing saved shipping address (must belong to current user).
+    /// </summary>
     [HttpPut("addresses/{addressId:long}")]
     public async Task<ActionResult> UpdateAddress(
         [FromRoute] long addressId,
@@ -229,6 +247,9 @@ public class AccountController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Delete a saved shipping address (soft delete if used by past orders, otherwise hard delete).
+    /// </summary>
     [HttpDelete("addresses/{addressId:long}")]
     public async Task<ActionResult> DeleteAddress([FromRoute] long addressId, CancellationToken ct)
     {

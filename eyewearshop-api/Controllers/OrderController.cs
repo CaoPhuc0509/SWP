@@ -19,6 +19,9 @@ public class OrderController : ControllerBase
         _db = db;
     }
 
+    /// <summary>
+    /// List the current user's orders with optional filtering by order type/status and pagination.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult> GetMyOrders(
         [FromQuery] string? orderType,
@@ -84,6 +87,10 @@ public class OrderController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Get a single order detail for the current user, including items, payments, shipping info,
+    /// and the order prescription snapshot (if the order used one).
+    /// </summary>
     [HttpGet("{orderId:long}")]
     public async Task<ActionResult> GetOrderDetail([FromRoute] long orderId, CancellationToken ct)
     {

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Reflection;
 using eyewearshop_data;
 using eyewearshop_service;
 using eyewearshop_service.Auth;
@@ -31,6 +32,14 @@ namespace eyewearshop_api
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "eyewearshop-api", Version = "v1" });
+
+                // Enable /// <summary> XML comments in Swagger UI
+                var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+                var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+                if (File.Exists(xmlPath))
+                {
+                    c.IncludeXmlComments(xmlPath);
+                }
 
                 var securityScheme = new OpenApiSecurityScheme
                 {

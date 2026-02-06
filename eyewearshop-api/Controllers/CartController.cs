@@ -23,6 +23,9 @@ public class CartController : ControllerBase
     public record AddCartItemRequest(long VariantId, int Quantity);
     public record UpdateCartItemRequest(int Quantity);
 
+    /// <summary>
+    /// Get the current user's shopping cart (session-based) with calculated subtotal.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult> GetMyCart(CancellationToken ct)
     {
@@ -97,6 +100,9 @@ public class CartController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Add an item to the cart (session-based) by variant id.
+    /// </summary>
     [HttpPost("items")]
     public async Task<ActionResult> AddItem([FromBody] AddCartItemRequest request, CancellationToken ct)
     {
@@ -117,6 +123,9 @@ public class CartController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Update quantity of a cart item (session-based) by variant id.
+    /// </summary>
     [HttpPut("items/{variantId:long}")]
     public async Task<ActionResult> UpdateItem([FromRoute] long variantId, [FromBody] UpdateCartItemRequest request, CancellationToken ct)
     {
@@ -134,6 +143,9 @@ public class CartController : ControllerBase
         return Ok(new { VariantId = variantId, Quantity = request.Quantity });
     }
 
+    /// <summary>
+    /// Remove an item from the cart (session-based) by variant id.
+    /// </summary>
     [HttpDelete("items/{variantId:long}")]
     public ActionResult RemoveItem([FromRoute] long variantId)
     {
@@ -143,6 +155,9 @@ public class CartController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Clear all items from the current user's cart (session-based).
+    /// </summary>
     [HttpDelete]
     public ActionResult ClearCart()
     {

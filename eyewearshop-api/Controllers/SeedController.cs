@@ -14,6 +14,10 @@ public class SeedController : ControllerBase
         _db = db;
     }
 
+    /// <summary>
+    /// Seed the database with sample catalog data (brands/categories/products/variants/etc.).
+    /// Intended for local/dev environments.
+    /// </summary>
     [HttpPost]
     public async Task<ActionResult> Seed(CancellationToken ct)
     {

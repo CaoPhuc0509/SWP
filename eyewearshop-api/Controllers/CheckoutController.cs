@@ -2,6 +2,7 @@ using System.Security.Claims;
 using eyewearshop_data;
 using eyewearshop_data.Entities;
 using eyewearshop_service.Cart;
+using eyewearshop_service.Validation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +48,10 @@ public class CheckoutController : ControllerBase
         return false;
     }
 
+    /// <summary>
+    /// Check what the current cart requires before checkout (e.g., prescription required or not).
+    /// Business rule: prescription is required ONLY if cart contains both Frame + RxLens.
+    /// </summary>
     [HttpGet("requirements")]
     public async Task<ActionResult> GetRequirements(CancellationToken ct)
     {
@@ -73,6 +78,10 @@ public class CheckoutController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Create an order from the current session cart, validate stock and (if needed) prescription compatibility,
+    /// then snapshot prescription into the order and clear the cart.
+    /// </summary>
     [HttpPost]
     public async Task<ActionResult> Checkout([FromBody] CheckoutRequest request, CancellationToken ct)
     {
@@ -91,6 +100,9 @@ public class CheckoutController : ControllerBase
         var variants = await _db.ProductVariants
             .Where(v => variantIds.Contains(v.VariantId))
             .Include(v => v.Product)
+            .ThenInclude(p => p.RxLensSpec)
+            .Include(v => v.Product)
+            .ThenInclude(p => p.FrameSpec)
             .ToListAsync(ct);
 
         if (variants.Count != variantIds.Count)
@@ -119,6 +131,45 @@ public class CheckoutController : ControllerBase
 
             if (prescription == null)
                 return BadRequest("Invalid PrescriptionId.");
+
+            // Compatibility checks (Prescription <-> RxLens, Frame <-> RxLens)
+            var rxLensSpecs = cartItemsWithProducts
+                .Where(x => x.Variant.Product.ProductType == ProductTypes.RxLens)
+                .Select(x => x.Variant.Product.RxLensSpec)
+                .Where(s => s != null)
+                .DistinctBy(s => s!.ProductId)
+                .Select(s => s!)
+                .ToList();
+
+            if (rxLensSpecs.Count == 0)
+                return BadRequest("Selected Rx lens has no specification configured.");
+
+            var frameSpecs = cartItemsWithProducts
+                .Where(x => x.Variant.Product.ProductType == ProductTypes.Frame)
+                .Select(x => x.Variant.Product.FrameSpec)
+                .Where(s => s != null)
+                .DistinctBy(s => s!.ProductId)
+                .Select(s => s!)
+                .ToList();
+
+            // 1) Prescription vs each RxLensSpec
+            var issues = new List<string>();
+            foreach (var lensSpec in rxLensSpecs)
+            {
+                issues.AddRange(RxCompatibility.ValidatePrescriptionAgainstLens(prescription, lensSpec));
+            }
+
+            // 2) Frame vs RxLensSpec (only when a frame exists)
+            foreach (var frameSpec in frameSpecs)
+            {
+                foreach (var lensSpec in rxLensSpecs)
+                {
+                    issues.AddRange(RxCompatibility.ValidateFrameLensCompatibility(frameSpec, lensSpec));
+                }
+            }
+
+            if (issues.Count > 0)
+                return BadRequest(new { Message = "Frame / RxLens / Prescription are incompatible.", Issues = issues });
         }
 
         // Stock check

@@ -49,6 +49,9 @@ public class PrescriptionController : ControllerBase
         DateTime? PrescriptionDate,
         string? PrescribedBy);
 
+    /// <summary>
+    /// List the current user's saved prescriptions.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult> GetMyPrescriptions(CancellationToken ct)
     {
@@ -82,6 +85,9 @@ public class PrescriptionController : ControllerBase
         return Ok(prescriptions);
     }
 
+    /// <summary>
+    /// Get a single saved prescription by id (must belong to current user).
+    /// </summary>
     [HttpGet("{prescriptionId:long}")]
     public async Task<ActionResult> GetPrescriptionDetail([FromRoute] long prescriptionId, CancellationToken ct)
     {
@@ -116,6 +122,9 @@ public class PrescriptionController : ControllerBase
         return Ok(prescription);
     }
 
+    /// <summary>
+    /// Create a new saved prescription for the current user.
+    /// </summary>
     [HttpPost]
     public async Task<ActionResult> CreatePrescription([FromBody] CreatePrescriptionRequest request, CancellationToken ct)
     {
@@ -153,6 +162,9 @@ public class PrescriptionController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Update an existing saved prescription (must belong to current user).
+    /// </summary>
     [HttpPut("{prescriptionId:long}")]
     public async Task<ActionResult> UpdatePrescription(
         [FromRoute] long prescriptionId,
@@ -190,6 +202,9 @@ public class PrescriptionController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Delete a saved prescription (orders store a snapshot and do not reference saved prescriptions).
+    /// </summary>
     [HttpDelete("{prescriptionId:long}")]
     public async Task<ActionResult> DeletePrescription([FromRoute] long prescriptionId, CancellationToken ct)
     {
