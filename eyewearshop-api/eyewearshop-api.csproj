@@ -30,4 +30,19 @@
     <ProjectReference Include="..\eyewearshop-service\eyewearshop-service.csproj" />
   </ItemGroup>
 
+  <!-- Ensure XML documentation is included in publish output -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DocumentationFile>bin\Release\net8.0\eyewearshop-api.xml</DocumentationFile>
+  </PropertyGroup>
+
+  <Target Name="IncludeXmlDocInPublish" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="@(IntermediateAssembly->'%(RelativeDir)%(Filename).xml')" Condition="Exists('%(IntermediateAssembly.RelativeDir)%(IntermediateAssembly.Filename).xml')">
+        <RelativePath>%(Filename).xml</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
 </Project>
