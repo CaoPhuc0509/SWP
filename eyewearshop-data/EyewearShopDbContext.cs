@@ -33,6 +33,15 @@ public class EyewearShopDbContext : DbContext
     public DbSet<ContactLensSpec> ContactLensSpecs => Set<ContactLensSpec>();
     public DbSet<RxLensSpec> RxLensSpecs => Set<RxLensSpec>();
 
+    public DbSet<Prescription> Prescriptions => Set<Prescription>();
+    public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
+    public DbSet<ReturnRequestItem> ReturnRequestItems => Set<ReturnRequestItem>();
+    public DbSet<ShippingInfo> ShippingInfos => Set<ShippingInfo>();
+    public DbSet<Promotion> Promotions => Set<Promotion>();
+    public DbSet<PromotionProduct> PromotionProducts => Set<PromotionProduct>();
+    public DbSet<Combo> Combos => Set<Combo>();
+    public DbSet<ComboItem> ComboItems => Set<ComboItem>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -261,8 +270,10 @@ public class EyewearShopDbContext : DbContext
             e.Property(x => x.OrderId).HasColumnName("order_id");
             e.Property(x => x.CustomerId).HasColumnName("customer_id").IsRequired();
             e.Property(x => x.OrderNumber).HasColumnName("order_number").HasMaxLength(50).IsRequired();
+            e.Property(x => x.OrderType).HasColumnName("order_type").HasMaxLength(30).IsRequired();
             e.Property(x => x.Status).HasColumnName("status");
             e.Property(x => x.PrescriptionId).HasColumnName("prescription_id");
+            e.Property(x => x.PromotionId).HasColumnName("promotion_id");
             e.Property(x => x.SubTotal).HasColumnName("sub_total");
             e.Property(x => x.ShippingFee).HasColumnName("shipping_fee");
             e.Property(x => x.DiscountAmount).HasColumnName("discount_amount");
@@ -275,10 +286,25 @@ public class EyewearShopDbContext : DbContext
             e.HasIndex(x => x.OrderNumber).IsUnique();
             e.HasIndex(x => x.CustomerId);
             e.HasIndex(x => x.PrescriptionId);
+            e.HasIndex(x => x.PromotionId);
+            e.HasIndex(x => x.OrderType);
 
             e.HasOne(x => x.Customer)
                 .WithMany()
                 .HasForeignKey(x => x.CustomerId);
+
+            e.HasOne(x => x.Prescription)
+                .WithMany(p => p.Orders)
+                .HasForeignKey(x => x.PrescriptionId);
+
+            e.HasOne(x => x.Promotion)
+                .WithMany(p => p.Orders)
+                .HasForeignKey(x => x.PromotionId);
+
+            e.HasOne(x => x.ShippingInfo)
+                .WithOne(s => s.Order)
+                .HasForeignKey<ShippingInfo>(s => s.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<OrderItem>(e =>
@@ -289,7 +315,9 @@ public class EyewearShopDbContext : DbContext
             e.Property(x => x.OrderId).HasColumnName("order_id").IsRequired();
             e.Property(x => x.VariantId).HasColumnName("variant_id");
             e.Property(x => x.Description).HasColumnName("description").HasMaxLength(255);
+            e.Property(x => x.UnitPrice).HasColumnName("unit_price");
             e.Property(x => x.Quantity).HasColumnName("quantity");
+            e.Property(x => x.SubTotal).HasColumnName("sub_total");
             e.Property(x => x.Status).HasColumnName("status");
 
             e.HasIndex(x => x.OrderId);
@@ -316,11 +344,13 @@ public class EyewearShopDbContext : DbContext
             e.Property(x => x.Amount).HasColumnName("amount");
             e.Property(x => x.Note).HasColumnName("note");
             e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
             e.HasIndex(x => x.OrderId);
 
             e.HasOne(x => x.Order)
-                .WithMany()
+                .WithMany(o => o.Payments)
                 .HasForeignKey(x => x.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
 
@@ -401,6 +431,240 @@ public class EyewearShopDbContext : DbContext
                 .WithOne(p => p.RxLensSpec)
                 .HasForeignKey<RxLensSpec>(x => x.ProductId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Prescription>(e =>
+        {
+            e.ToTable("prescriptions");
+            e.HasKey(x => x.PrescriptionId);
+            e.Property(x => x.PrescriptionId).HasColumnName("prescription_id");
+            e.Property(x => x.CustomerId).HasColumnName("customer_id").IsRequired();
+            
+            e.Property(x => x.RightSphere).HasColumnName("right_sphere");
+            e.Property(x => x.RightCylinder).HasColumnName("right_cylinder");
+            e.Property(x => x.RightAxis).HasColumnName("right_axis");
+            e.Property(x => x.RightAdd).HasColumnName("right_add");
+            e.Property(x => x.RightPD).HasColumnName("right_pd");
+            
+            e.Property(x => x.LeftSphere).HasColumnName("left_sphere");
+            e.Property(x => x.LeftCylinder).HasColumnName("left_cylinder");
+            e.Property(x => x.LeftAxis).HasColumnName("left_axis");
+            e.Property(x => x.LeftAdd).HasColumnName("left_add");
+            e.Property(x => x.LeftPD).HasColumnName("left_pd");
+            
+            e.Property(x => x.Notes).HasColumnName("notes");
+            e.Property(x => x.PrescriptionDate).HasColumnName("prescription_date");
+            e.Property(x => x.PrescribedBy).HasColumnName("prescribed_by").HasMaxLength(255);
+            
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.Property(x => x.Status).HasColumnName("status");
+
+            e.HasIndex(x => x.CustomerId);
+
+            e.HasOne(x => x.Customer)
+                .WithMany()
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReturnRequest>(e =>
+        {
+            e.ToTable("return_requests");
+            e.HasKey(x => x.ReturnRequestId);
+            e.Property(x => x.ReturnRequestId).HasColumnName("return_request_id");
+            e.Property(x => x.OrderId).HasColumnName("order_id").IsRequired();
+            e.Property(x => x.CustomerId).HasColumnName("customer_id").IsRequired();
+            
+            e.Property(x => x.RequestType).HasColumnName("request_type").HasMaxLength(30).IsRequired();
+            e.Property(x => x.RequestNumber).HasColumnName("request_number").HasMaxLength(50).IsRequired();
+            e.Property(x => x.Status).HasColumnName("status");
+            
+            e.Property(x => x.Reason).HasColumnName("reason");
+            e.Property(x => x.Description).HasColumnName("description");
+            e.Property(x => x.StaffNotes).HasColumnName("staff_notes");
+            
+            e.Property(x => x.ExchangeOrderId).HasColumnName("exchange_order_id");
+            
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasIndex(x => x.RequestNumber).IsUnique();
+            e.HasIndex(x => x.OrderId);
+            e.HasIndex(x => x.CustomerId);
+            e.HasIndex(x => x.ExchangeOrderId);
+
+            e.HasOne(x => x.Order)
+                .WithMany(o => o.ReturnRequests)
+                .HasForeignKey(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.Customer)
+                .WithMany()
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.ExchangeOrder)
+                .WithMany(o => o.ExchangeOrders)
+                .HasForeignKey(x => x.ExchangeOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ReturnRequestItem>(e =>
+        {
+            e.ToTable("return_request_items");
+            e.HasKey(x => x.ReturnRequestItemId);
+            e.Property(x => x.ReturnRequestItemId).HasColumnName("return_request_item_id");
+            e.Property(x => x.ReturnRequestId).HasColumnName("return_request_id").IsRequired();
+            e.Property(x => x.OrderItemId).HasColumnName("order_item_id").IsRequired();
+            e.Property(x => x.Quantity).HasColumnName("quantity");
+
+            e.HasIndex(x => x.ReturnRequestId);
+            e.HasIndex(x => x.OrderItemId);
+
+            e.HasOne(x => x.ReturnRequest)
+                .WithMany(r => r.Items)
+                .HasForeignKey(x => x.ReturnRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.OrderItem)
+                .WithMany()
+                .HasForeignKey(x => x.OrderItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ShippingInfo>(e =>
+        {
+            e.ToTable("shipping_infos");
+            e.HasKey(x => x.ShippingInfoId);
+            e.Property(x => x.ShippingInfoId).HasColumnName("shipping_info_id");
+            e.Property(x => x.OrderId).HasColumnName("order_id").IsRequired();
+            
+            e.Property(x => x.RecipientName).HasColumnName("recipient_name").HasMaxLength(255).IsRequired();
+            e.Property(x => x.PhoneNumber).HasColumnName("phone_number").HasMaxLength(20).IsRequired();
+            e.Property(x => x.AddressLine).HasColumnName("address_line").HasMaxLength(255).IsRequired();
+            e.Property(x => x.City).HasColumnName("city").HasMaxLength(100);
+            e.Property(x => x.District).HasColumnName("district").HasMaxLength(100);
+            e.Property(x => x.Ward).HasColumnName("ward").HasMaxLength(100);
+            e.Property(x => x.PostalCode).HasColumnName("postal_code").HasMaxLength(20);
+            e.Property(x => x.Note).HasColumnName("note");
+            
+            e.Property(x => x.ShippingMethod).HasColumnName("shipping_method").HasMaxLength(50);
+            e.Property(x => x.TrackingNumber).HasColumnName("tracking_number").HasMaxLength(100);
+            e.Property(x => x.Carrier).HasColumnName("carrier").HasMaxLength(100);
+            e.Property(x => x.ShippedAt).HasColumnName("shipped_at");
+            e.Property(x => x.EstimatedDeliveryDate).HasColumnName("estimated_delivery_date");
+            e.Property(x => x.DeliveredAt).HasColumnName("delivered_at");
+            
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasIndex(x => x.OrderId).IsUnique();
+            e.HasIndex(x => x.TrackingNumber);
+        });
+
+        modelBuilder.Entity<Promotion>(e =>
+        {
+            e.ToTable("promotions");
+            e.HasKey(x => x.PromotionId);
+            e.Property(x => x.PromotionId).HasColumnName("promotion_id");
+            e.Property(x => x.PromotionName).HasColumnName("promotion_name").HasMaxLength(255).IsRequired();
+            e.Property(x => x.Description).HasColumnName("description");
+            
+            e.Property(x => x.PromotionType).HasColumnName("promotion_type").HasMaxLength(50).IsRequired();
+            e.Property(x => x.DiscountPercentage).HasColumnName("discount_percentage");
+            e.Property(x => x.DiscountAmount).HasColumnName("discount_amount");
+            
+            e.Property(x => x.StartDate).HasColumnName("start_date");
+            e.Property(x => x.EndDate).HasColumnName("end_date");
+            
+            e.Property(x => x.MinimumPurchaseAmount).HasColumnName("minimum_purchase_amount");
+            e.Property(x => x.MaximumUsagePerCustomer).HasColumnName("maximum_usage_per_customer");
+            e.Property(x => x.TotalUsageLimit).HasColumnName("total_usage_limit");
+            e.Property(x => x.CurrentUsageCount).HasColumnName("current_usage_count");
+            
+            e.Property(x => x.PromoCode).HasColumnName("promo_code").HasMaxLength(50);
+            
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.Property(x => x.Status).HasColumnName("status");
+
+            e.HasIndex(x => x.PromoCode);
+            e.HasIndex(x => new { x.StartDate, x.EndDate });
+        });
+
+        modelBuilder.Entity<PromotionProduct>(e =>
+        {
+            e.ToTable("promotion_products");
+            e.HasKey(x => x.PromotionProductId);
+            e.Property(x => x.PromotionProductId).HasColumnName("promotion_product_id");
+            e.Property(x => x.PromotionId).HasColumnName("promotion_id").IsRequired();
+            e.Property(x => x.ProductId).HasColumnName("product_id");
+            e.Property(x => x.CategoryId).HasColumnName("category_id");
+
+            e.HasIndex(x => x.PromotionId);
+            e.HasIndex(x => x.ProductId);
+            e.HasIndex(x => x.CategoryId);
+
+            e.HasOne(x => x.Promotion)
+                .WithMany(p => p.Products)
+                .HasForeignKey(x => x.PromotionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Product)
+                .WithMany()
+                .HasForeignKey(x => x.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Category)
+                .WithMany()
+                .HasForeignKey(x => x.CategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Combo>(e =>
+        {
+            e.ToTable("combos");
+            e.HasKey(x => x.ComboId);
+            e.Property(x => x.ComboId).HasColumnName("combo_id");
+            e.Property(x => x.ComboName).HasColumnName("combo_name").HasMaxLength(255).IsRequired();
+            e.Property(x => x.Description).HasColumnName("description");
+            
+            e.Property(x => x.ComboPrice).HasColumnName("combo_price");
+            e.Property(x => x.OriginalPrice).HasColumnName("original_price");
+            
+            e.Property(x => x.StartDate).HasColumnName("start_date");
+            e.Property(x => x.EndDate).HasColumnName("end_date");
+            
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.Property(x => x.Status).HasColumnName("status");
+
+            e.HasIndex(x => new { x.StartDate, x.EndDate });
+        });
+
+        modelBuilder.Entity<ComboItem>(e =>
+        {
+            e.ToTable("combo_items");
+            e.HasKey(x => x.ComboItemId);
+            e.Property(x => x.ComboItemId).HasColumnName("combo_item_id");
+            e.Property(x => x.ComboId).HasColumnName("combo_id").IsRequired();
+            e.Property(x => x.ProductId).HasColumnName("product_id").IsRequired();
+            e.Property(x => x.Quantity).HasColumnName("quantity");
+            e.Property(x => x.IsRequired).HasColumnName("is_required");
+
+            e.HasIndex(x => x.ComboId);
+            e.HasIndex(x => x.ProductId);
+
+            e.HasOne(x => x.Combo)
+                .WithMany(c => c.Items)
+                .HasForeignKey(x => x.ComboId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Product)
+                .WithMany()
+                .HasForeignKey(x => x.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

@@ -50,6 +50,12 @@ public class CatalogController : ControllerBase
         [FromQuery] string? color,
         [FromQuery] decimal? minPrice,
         [FromQuery] decimal? maxPrice,
+        [FromQuery] decimal? minA, // Frame size A
+        [FromQuery] decimal? maxA,
+        [FromQuery] decimal? minB, // Frame size B
+        [FromQuery] decimal? maxB,
+        [FromQuery] decimal? minDbl, // Frame size DBL
+        [FromQuery] decimal? maxDbl,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
@@ -94,6 +100,30 @@ public class CatalogController : ControllerBase
 
             if (maxPrice.HasValue)
                 query = query.Where(p => p.Variants.Any(v => v.Price <= maxPrice.Value));
+        }
+
+        // Filter by frame size attributes (for frames only)
+        if (minA.HasValue || maxA.HasValue || minB.HasValue || maxB.HasValue || minDbl.HasValue || maxDbl.HasValue)
+        {
+            query = query.Where(p => p.ProductType == ProductTypes.Frame && p.FrameSpec != null);
+
+            if (minA.HasValue)
+                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.A >= minA.Value);
+
+            if (maxA.HasValue)
+                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.A <= maxA.Value);
+
+            if (minB.HasValue)
+                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.B >= minB.Value);
+
+            if (maxB.HasValue)
+                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.B <= maxB.Value);
+
+            if (minDbl.HasValue)
+                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.Dbl >= minDbl.Value);
+
+            if (maxDbl.HasValue)
+                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.Dbl <= maxDbl.Value);
         }
 
         var total = await query.CountAsync(ct);

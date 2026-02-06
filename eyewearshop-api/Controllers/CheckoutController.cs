@@ -19,7 +19,11 @@ public class CheckoutController : ControllerBase
         _db = db;
     }
 
-    public record CheckoutRequest(long AddressId, long? PrescriptionId);
+    public record CheckoutRequest(
+        long AddressId, 
+        long? PrescriptionId,
+        string? PromoCode = null,
+        string? ShippingMethod = null);
 
     [HttpGet("requirements")]
     public async Task<ActionResult> GetRequirements(CancellationToken ct)
@@ -105,16 +109,59 @@ public class CheckoutController : ControllerBase
         var orderNumber = GenerateOrderNumber(now);
 
         var subTotal = cartItems.Sum(ci => ci.Variant.Price * ci.Quantity);
-        var shippingFee = 0m;
-        var discountAmount = 0m;
+
+        // Determine order type
+        string orderType;
+        if (hasFrame && hasRxLens && request.PrescriptionId.HasValue)
+        {
+            orderType = OrderTypes.Prescription;
+        }
+        else if (cartItems.Any(ci => ci.Quantity > ci.Variant.StockQuantity && ci.Variant.PreOrderQuantity > 0))
+        {
+            orderType = OrderTypes.PreOrder;
+        }
+        else
+        {
+            orderType = OrderTypes.Available;
+        }
+
+        // Check promotion
+        long? promotionId = null;
+        decimal discountAmount = 0m;
+        if (!string.IsNullOrWhiteSpace(request.PromoCode))
+        {
+            var promotion = await _db.Promotions
+                .FirstOrDefaultAsync(p => p.PromoCode == request.PromoCode.Trim() 
+                    && p.Status == 1 
+                    && p.StartDate <= now 
+                    && p.EndDate >= now, ct);
+            
+            if (promotion != null && promotion.CurrentUsageCount < (promotion.TotalUsageLimit ?? int.MaxValue))
+            {
+                promotionId = promotion.PromotionId;
+                // Calculate discount (simplified - can be enhanced)
+                if (promotion.DiscountPercentage.HasValue)
+                {
+                    discountAmount = subTotal * promotion.DiscountPercentage.Value / 100;
+                }
+                else if (promotion.DiscountAmount.HasValue)
+                {
+                    discountAmount = promotion.DiscountAmount.Value;
+                }
+            }
+        }
+
+        var shippingFee = CalculateShippingFee(request.ShippingMethod);
         var total = subTotal + shippingFee - discountAmount;
 
         var order = new Order
         {
             CustomerId = userId,
             OrderNumber = orderNumber,
-            Status = 0,
+            OrderType = orderType,
+            Status = OrderStatuses.Pending,
             PrescriptionId = request.PrescriptionId,
+            PromotionId = promotionId,
             SubTotal = subTotal,
             ShippingFee = shippingFee,
             DiscountAmount = discountAmount,
@@ -126,15 +173,59 @@ public class CheckoutController : ControllerBase
         _db.Orders.Add(order);
         await _db.SaveChangesAsync(ct);
 
+        // Create shipping info
+        var shippingInfo = new ShippingInfo
+        {
+            OrderId = order.OrderId,
+            RecipientName = address.RecipientName ?? "",
+            PhoneNumber = address.PhoneNumber ?? "",
+            AddressLine = address.AddressLine ?? "",
+            City = address.City,
+            District = address.District,
+            Ward = null, // Can be added to UserAddress if needed
+            Note = address.Note,
+            ShippingMethod = request.ShippingMethod ?? "Standard",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _db.ShippingInfos.Add(shippingInfo);
+
+        // Update promotion usage
+        if (promotionId.HasValue)
+        {
+            var promotion = await _db.Promotions.FindAsync(new object[] { promotionId.Value }, ct);
+            if (promotion != null)
+            {
+                promotion.CurrentUsageCount++;
+                promotion.UpdatedAt = now;
+            }
+        }
+
         foreach (var ci in cartItems)
         {
+            var unitPrice = ci.Variant.Price;
             _db.OrderItems.Add(new OrderItem
             {
                 OrderId = order.OrderId,
                 VariantId = ci.VariantId,
+                UnitPrice = unitPrice,
                 Quantity = ci.Quantity,
+                SubTotal = unitPrice * ci.Quantity,
                 Status = 1
             });
+
+            // Update stock
+            if (ci.Quantity <= ci.Variant.StockQuantity)
+            {
+                ci.Variant.StockQuantity -= ci.Quantity;
+            }
+            else
+            {
+                var stockUsed = ci.Variant.StockQuantity;
+                ci.Variant.StockQuantity = 0;
+                ci.Variant.PreOrderQuantity -= (ci.Quantity - stockUsed);
+            }
+            ci.Variant.UpdatedAt = now;
         }
 
         // Clear cart
@@ -147,6 +238,7 @@ public class CheckoutController : ControllerBase
         {
             order.OrderId,
             order.OrderNumber,
+            order.OrderType,
             order.TotalAmount,
             RequiresPrescription = requiresPrescription
         });
@@ -165,5 +257,16 @@ public class CheckoutController : ControllerBase
         // Must be <= 23 chars for VietQR content; keep short.
         // Example: OD240123123456789 (18 chars)
         return $"OD{nowUtc:yyMMddHHmmssfff}";
+    }
+
+    private static decimal CalculateShippingFee(string? shippingMethod)
+    {
+        // Simplified shipping fee calculation
+        return shippingMethod?.ToUpper() switch
+        {
+            "EXPRESS" => 50000m,
+            "STANDARD" => 30000m,
+            _ => 30000m
+        };
     }
 }

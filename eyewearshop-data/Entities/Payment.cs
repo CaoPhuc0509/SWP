@@ -10,6 +10,8 @@ public class Payment
     public decimal Amount { get; set; }
     public string? Note { get; set; }
     public short Status { get; set; } = 0;
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 
     public Order? Order { get; set; }
     public User? Customer { get; set; }

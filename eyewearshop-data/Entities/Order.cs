@@ -6,9 +6,11 @@ public class Order
     public long CustomerId { get; set; }
 
     public string OrderNumber { get; set; } = null!;
-    public short Status { get; set; } = 0;
+    public string OrderType { get; set; } = null!; // AVAILABLE, PRE_ORDER, PRESCRIPTION
+    public short Status { get; set; } = 0; // Using OrderStatuses constants
 
     public long? PrescriptionId { get; set; }
+    public long? PromotionId { get; set; }
 
     public decimal SubTotal { get; set; } = 0;
     public decimal ShippingFee { get; set; } = 0;
@@ -22,5 +24,11 @@ public class Order
     public DateTime UpdatedAt { get; set; }
 
     public User Customer { get; set; } = null!;
+    public Prescription? Prescription { get; set; }
+    public Promotion? Promotion { get; set; }
+    public ShippingInfo? ShippingInfo { get; set; }
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
+    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public ICollection<ReturnRequest> ReturnRequests { get; set; } = new List<ReturnRequest>();
+    public ICollection<ReturnRequest> ExchangeOrders { get; set; } = new List<ReturnRequest>(); // Orders created from exchanges
 }
