@@ -7,5 +7,5 @@ public class Feature
     public string? Description { get; set; }
     public short Status { get; set; } = 1;
 
-    public ICollection<RxLensSpec> RxLensSpecs { get; set; } = new List<RxLensSpec>();
+    public ICollection<RxLensSpecFeature> RxLensSpecFeatures { get; set; } = new List<RxLensSpecFeature>();
 }

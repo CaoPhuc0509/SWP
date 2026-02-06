@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using eyewearshop_data;
@@ -11,9 +12,11 @@ using eyewearshop_data;
 namespace eyewearshop_data.Migrations
 {
     [DbContext(typeof(EyewearShopDbContext))]
-    partial class EyewearShopDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260206061302_RxLensMultipleFeatures")]
+    partial class RxLensMultipleFeatures
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -428,6 +431,10 @@ namespace eyewearshop_data.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("order_type");
 
+                    b.Property<long?>("PrescriptionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("prescription_id");
+
                     b.Property<long?>("PromotionId")
                         .HasColumnType("bigint")
                         .HasColumnName("promotion_id");
@@ -460,6 +467,8 @@ namespace eyewearshop_data.Migrations
                         .IsUnique();
 
                     b.HasIndex("OrderType");
+
+                    b.HasIndex("PrescriptionId");
 
                     b.HasIndex("PromotionId");
 
@@ -511,84 +520,6 @@ namespace eyewearshop_data.Migrations
                     b.HasIndex("VariantId");
 
                     b.ToTable("order_items", (string)null);
-                });
-
-            modelBuilder.Entity("eyewearshop_data.Entities.OrderPrescription", b =>
-                {
-                    b.Property<long>("OrderId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("order_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<long>("CustomerId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("customer_id");
-
-                    b.Property<decimal?>("LeftAdd")
-                        .HasColumnType("numeric")
-                        .HasColumnName("left_add");
-
-                    b.Property<decimal?>("LeftAxis")
-                        .HasColumnType("numeric")
-                        .HasColumnName("left_axis");
-
-                    b.Property<decimal?>("LeftCylinder")
-                        .HasColumnType("numeric")
-                        .HasColumnName("left_cylinder");
-
-                    b.Property<decimal?>("LeftPD")
-                        .HasColumnType("numeric")
-                        .HasColumnName("left_pd");
-
-                    b.Property<decimal?>("LeftSphere")
-                        .HasColumnType("numeric")
-                        .HasColumnName("left_sphere");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text")
-                        .HasColumnName("notes");
-
-                    b.Property<string>("PrescribedBy")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("prescribed_by");
-
-                    b.Property<DateTime?>("PrescriptionDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("prescription_date");
-
-                    b.Property<decimal?>("RightAdd")
-                        .HasColumnType("numeric")
-                        .HasColumnName("right_add");
-
-                    b.Property<decimal?>("RightAxis")
-                        .HasColumnType("numeric")
-                        .HasColumnName("right_axis");
-
-                    b.Property<decimal?>("RightCylinder")
-                        .HasColumnType("numeric")
-                        .HasColumnName("right_cylinder");
-
-                    b.Property<decimal?>("RightPD")
-                        .HasColumnType("numeric")
-                        .HasColumnName("right_pd");
-
-                    b.Property<decimal?>("RightSphere")
-                        .HasColumnType("numeric")
-                        .HasColumnName("right_sphere");
-
-                    b.Property<long?>("SavedPrescriptionId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("saved_prescription_id");
-
-                    b.HasKey("OrderId");
-
-                    b.HasIndex("CustomerId");
-
-                    b.ToTable("order_prescriptions", (string)null);
                 });
 
             modelBuilder.Entity("eyewearshop_data.Entities.Payment", b =>
@@ -1715,11 +1646,17 @@ namespace eyewearshop_data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("eyewearshop_data.Entities.Prescription", "Prescription")
+                        .WithMany("Orders")
+                        .HasForeignKey("PrescriptionId");
+
                     b.HasOne("eyewearshop_data.Entities.Promotion", "Promotion")
                         .WithMany("Orders")
                         .HasForeignKey("PromotionId");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("Prescription");
 
                     b.Navigation("Promotion");
                 });
@@ -1739,25 +1676,6 @@ namespace eyewearshop_data.Migrations
                     b.Navigation("Order");
 
                     b.Navigation("Variant");
-                });
-
-            modelBuilder.Entity("eyewearshop_data.Entities.OrderPrescription", b =>
-                {
-                    b.HasOne("eyewearshop_data.Entities.User", "Customer")
-                        .WithMany()
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("eyewearshop_data.Entities.Order", "Order")
-                        .WithOne("OrderPrescription")
-                        .HasForeignKey("eyewearshop_data.Entities.OrderPrescription", "OrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Customer");
-
-                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("eyewearshop_data.Entities.Payment", b =>
@@ -2021,8 +1939,6 @@ namespace eyewearshop_data.Migrations
 
                     b.Navigation("Items");
 
-                    b.Navigation("OrderPrescription");
-
                     b.Navigation("Payments");
 
                     b.Navigation("ReturnRequests");
@@ -2033,6 +1949,11 @@ namespace eyewearshop_data.Migrations
             modelBuilder.Entity("eyewearshop_data.Entities.OrderItem", b =>
                 {
                     b.Navigation("ReturnRequestItems");
+                });
+
+            modelBuilder.Entity("eyewearshop_data.Entities.Prescription", b =>
+                {
+                    b.Navigation("Orders");
                 });
 
             modelBuilder.Entity("eyewearshop_data.Entities.Product", b =>

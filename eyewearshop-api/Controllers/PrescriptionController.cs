@@ -200,21 +200,9 @@ public class PrescriptionController : ControllerBase
 
         if (prescription == null) return NotFound();
 
-        // Check if prescription is used in any orders
-        var hasOrders = await _db.Orders
-            .AnyAsync(o => o.PrescriptionId == prescriptionId, ct);
-
-        if (hasOrders)
-        {
-            // Soft delete - set status to 0
-            prescription.Status = 0;
-            prescription.UpdatedAt = DateTime.UtcNow;
-        }
-        else
-        {
-            // Hard delete if not used
-            _db.Prescriptions.Remove(prescription);
-        }
+        // Orders store a snapshot (OrderPrescription) and do NOT reference editable prescriptions.
+        // So users can freely delete their saved prescriptions.
+        _db.Prescriptions.Remove(prescription);
 
         await _db.SaveChangesAsync(ct);
 

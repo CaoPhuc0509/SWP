@@ -104,17 +104,23 @@ public class OrderController : ControllerBase
                 o.TotalAmount,
                 o.CreatedAt,
                 o.UpdatedAt,
-                Prescription = o.Prescription == null ? null : new
+                Prescription = o.OrderPrescription == null ? null : new
                 {
-                    o.Prescription.PrescriptionId,
-                    o.Prescription.RightSphere,
-                    o.Prescription.RightCylinder,
-                    o.Prescription.RightAxis,
-                    o.Prescription.LeftSphere,
-                    o.Prescription.LeftCylinder,
-                    o.Prescription.LeftAxis,
-                    o.Prescription.PrescribedBy,
-                    o.Prescription.PrescriptionDate
+                    o.OrderPrescription.SavedPrescriptionId,
+                    o.OrderPrescription.RightSphere,
+                    o.OrderPrescription.RightCylinder,
+                    o.OrderPrescription.RightAxis,
+                    o.OrderPrescription.RightAdd,
+                    o.OrderPrescription.RightPD,
+                    o.OrderPrescription.LeftSphere,
+                    o.OrderPrescription.LeftCylinder,
+                    o.OrderPrescription.LeftAxis,
+                    o.OrderPrescription.LeftAdd,
+                    o.OrderPrescription.LeftPD,
+                    o.OrderPrescription.Notes,
+                    o.OrderPrescription.PrescribedBy,
+                    o.OrderPrescription.PrescriptionDate,
+                    o.OrderPrescription.CreatedAt
                 },
                 ShippingInfo = o.ShippingInfo == null ? null : new
                 {

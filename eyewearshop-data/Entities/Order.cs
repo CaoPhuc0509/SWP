@@ -9,7 +9,6 @@ public class Order
     public string OrderType { get; set; } = null!; // AVAILABLE, PRE_ORDER, PRESCRIPTION
     public short Status { get; set; } = 0; // Using OrderStatuses constants
 
-    public long? PrescriptionId { get; set; }
     public long? PromotionId { get; set; }
 
     public decimal SubTotal { get; set; } = 0;
@@ -24,7 +23,7 @@ public class Order
     public DateTime UpdatedAt { get; set; }
 
     public User Customer { get; set; } = null!;
-    public Prescription? Prescription { get; set; }
+    public OrderPrescription? OrderPrescription { get; set; }
     public Promotion? Promotion { get; set; }
     public ShippingInfo? ShippingInfo { get; set; }
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();

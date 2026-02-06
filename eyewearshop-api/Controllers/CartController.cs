@@ -1,6 +1,5 @@
-using System.Security.Claims;
 using eyewearshop_data;
-using eyewearshop_data.Entities;
+using eyewearshop_service.Cart;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +12,12 @@ namespace eyewearshop_api.Controllers;
 public class CartController : ControllerBase
 {
     private readonly EyewearShopDbContext _db;
+    private readonly ISessionCartService _cartService;
 
-    public CartController(EyewearShopDbContext db)
+    public CartController(EyewearShopDbContext db, ISessionCartService cartService)
     {
         _db = db;
+        _cartService = cartService;
     }
 
     public record AddCartItemRequest(long VariantId, int Quantity);
@@ -25,49 +26,73 @@ public class CartController : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetMyCart(CancellationToken ct)
     {
-        var userId = GetUserIdOrThrow();
-
-        var cart = await EnsureCartAsync(userId, ct);
-
-        var items = await _db.CartItems
-            .AsNoTracking()
-            .Where(ci => ci.CartId == cart.CartId)
-            .Include(ci => ci.Variant)
-            .ThenInclude(v => v.Product)
-            .Select(ci => new
+        var cartItems = _cartService.GetCart();
+        
+        if (cartItems.Count == 0)
+        {
+            return Ok(new
             {
-                ci.CartItemId,
-                ci.Quantity,
-                Variant = new
+                Items = Array.Empty<object>(),
+                Summary = new
                 {
-                    ci.Variant.VariantId,
-                    ci.Variant.Color,
-                    ci.Variant.Price,
-                    ci.Variant.StockQuantity,
-                    ci.Variant.PreOrderQuantity,
-                    Product = new
-                    {
-                        ci.Variant.Product.ProductId,
-                        ci.Variant.Product.ProductName,
-                        ci.Variant.Product.Sku,
-                        ci.Variant.Product.ProductType
-                    }
-                },
-                LineTotal = ci.Variant.Price * ci.Quantity
+                    SubTotal = 0m,
+                    ItemCount = 0
+                }
+            });
+        }
+
+        var variantIds = cartItems.Select(ci => ci.VariantId).ToList();
+        
+        var variants = await _db.ProductVariants
+            .AsNoTracking()
+            .Where(v => variantIds.Contains(v.VariantId) && v.Status == 1)
+            .Include(v => v.Product)
+            .ThenInclude(p => p.Images.Where(i => i.Status == 1 && i.IsPrimary))
+            .Select(v => new
+            {
+                v.VariantId,
+                v.Color,
+                v.Price,
+                v.StockQuantity,
+                v.PreOrderQuantity,
+                Product = new
+                {
+                    v.Product.ProductId,
+                    v.Product.ProductName,
+                    v.Product.Sku,
+                    v.Product.ProductType,
+                    PrimaryImageUrl = v.Product.Images
+                        .Where(i => i.Status == 1)
+                        .OrderByDescending(i => i.IsPrimary)
+                        .ThenBy(i => i.SortOrder)
+                        .Select(i => i.Url)
+                        .FirstOrDefault()
+                }
             })
             .ToListAsync(ct);
 
-        var subTotal = items.Sum(x => (decimal)x.LineTotal);
+        var items = cartItems
+            .Join(variants, 
+                ci => ci.VariantId, 
+                v => v.VariantId, 
+                (ci, v) => new
+                {
+                    VariantId = ci.VariantId,
+                    Quantity = ci.Quantity,
+                    Variant = v,
+                    LineTotal = v.Price * ci.Quantity
+                })
+            .ToList();
+
+        var subTotal = items.Sum(x => x.LineTotal);
 
         return Ok(new
         {
-            cart.CartId,
-            CartUpdatedAt = cart.UpdatedAt,
             Items = items,
             Summary = new
             {
                 SubTotal = subTotal,
-                ItemCount = items.Sum(x => (int)x.Quantity)
+                ItemCount = items.Sum(x => x.Quantity)
             }
         });
     }
@@ -77,104 +102,51 @@ public class CartController : ControllerBase
     {
         if (request.Quantity <= 0) return BadRequest("Quantity must be greater than 0.");
 
-        var userId = GetUserIdOrThrow();
-        var cart = await EnsureCartAsync(userId, ct);
-
         var variant = await _db.ProductVariants
             .AsNoTracking()
             .FirstOrDefaultAsync(v => v.VariantId == request.VariantId && v.Status == 1, ct);
 
         if (variant == null) return NotFound("Variant not found.");
 
-        var item = await _db.CartItems
-            .FirstOrDefaultAsync(ci => ci.CartId == cart.CartId && ci.VariantId == request.VariantId, ct);
+        _cartService.AddItem(request.VariantId, request.Quantity);
 
-        if (item == null)
-        {
-            item = new CartItem
-            {
-                CartId = cart.CartId,
-                VariantId = request.VariantId,
-                Quantity = request.Quantity
-            };
-            _db.CartItems.Add(item);
-        }
-        else
-        {
-            item.Quantity += request.Quantity; // Increment behavior
-        }
-
-        cart.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
-
-        return Ok(new { item.CartItemId, item.CartId, item.VariantId, item.Quantity });
+        return Ok(new 
+        { 
+            VariantId = request.VariantId, 
+            Quantity = _cartService.GetCart().FirstOrDefault(x => x.VariantId == request.VariantId)?.Quantity ?? request.Quantity
+        });
     }
 
-    [HttpPut("items/{cartItemId:long}")]
-    public async Task<ActionResult> UpdateItem([FromRoute] long cartItemId, [FromBody] UpdateCartItemRequest request, CancellationToken ct)
+    [HttpPut("items/{variantId:long}")]
+    public async Task<ActionResult> UpdateItem([FromRoute] long variantId, [FromBody] UpdateCartItemRequest request, CancellationToken ct)
     {
         if (request.Quantity <= 0) return BadRequest("Quantity must be greater than 0.");
 
-        var userId = GetUserIdOrThrow();
+        var variant = await _db.ProductVariants
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.VariantId == variantId && v.Status == 1, ct);
 
-        var cart = await EnsureCartAsync(userId, ct);
+        if (variant == null) return NotFound("Variant not found.");
 
-        var item = await _db.CartItems
-            .FirstOrDefaultAsync(ci => ci.CartItemId == cartItemId && ci.CartId == cart.CartId, ct);
+        var updated = _cartService.UpdateItem(variantId, request.Quantity);
+        if (!updated) return NotFound("Item not found in cart.");
 
-        if (item == null) return NotFound();
-
-        item.Quantity = request.Quantity;
-        cart.UpdatedAt = DateTime.UtcNow;
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(new { item.CartItemId, item.CartId, item.VariantId, item.Quantity });
+        return Ok(new { VariantId = variantId, Quantity = request.Quantity });
     }
 
-    [HttpDelete("items/{cartItemId:long}")]
-    public async Task<ActionResult> RemoveItem([FromRoute] long cartItemId, CancellationToken ct)
+    [HttpDelete("items/{variantId:long}")]
+    public ActionResult RemoveItem([FromRoute] long variantId)
     {
-        var userId = GetUserIdOrThrow();
-        var cart = await EnsureCartAsync(userId, ct);
+        var removed = _cartService.RemoveItem(variantId);
+        if (!removed) return NotFound("Item not found in cart.");
 
-        var item = await _db.CartItems
-            .FirstOrDefaultAsync(ci => ci.CartItemId == cartItemId && ci.CartId == cart.CartId, ct);
-
-        if (item == null) return NotFound();
-
-        _db.CartItems.Remove(item);
-        cart.UpdatedAt = DateTime.UtcNow;
-
-        await _db.SaveChangesAsync(ct);
         return NoContent();
     }
 
-    private long GetUserIdOrThrow()
+    [HttpDelete]
+    public ActionResult ClearCart()
     {
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!long.TryParse(userIdClaim, out var userId))
-            throw new InvalidOperationException("Missing user id claim.");
-
-        return userId;
-    }
-
-    private async Task<Cart> EnsureCartAsync(long userId, CancellationToken ct)
-    {
-        var cart = await _db.Carts
-            .FirstOrDefaultAsync(c => c.CustomerId == userId, ct);
-
-        if (cart != null) return cart;
-
-        var now = DateTime.UtcNow;
-        cart = new Cart
-        {
-            CustomerId = userId,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-
-        _db.Carts.Add(cart);
-        await _db.SaveChangesAsync(ct);
-        return cart;
+        _cartService.ClearCart();
+        return NoContent();
     }
 }

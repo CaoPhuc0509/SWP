@@ -24,7 +24,7 @@ public class AuthController : ControllerBase
         _refreshTokens = refreshTokens;
     }
 
-    public record RegisterRequest(string Email, string Password, string? FullName);
+    public record RegisterRequest(string Email, string Password, string? FullName, string? PhoneNumber);
     public record LoginRequest(string Email, string Password);
     public record RefreshRequest(string RefreshToken);
     public record LogoutRequest(string RefreshToken);
@@ -50,7 +50,8 @@ public class AuthController : ControllerBase
         {
             Email = email,
             PasswordHash = PasswordHasher.Hash(request.Password),
-            FullName = request.FullName,
+            FullName = string.IsNullOrWhiteSpace(request.FullName) ? null : request.FullName.Trim(),
+            PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
             RoleId = customerRole.RoleId,
             CreatedAt = now,
             UpdatedAt = now,
@@ -134,6 +135,7 @@ public class AuthController : ControllerBase
             user.UserId,
             user.Email,
             user.FullName,
+            user.PhoneNumber,
             Role = user.Role.RoleName
         });
     }

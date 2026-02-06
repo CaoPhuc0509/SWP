@@ -22,8 +22,12 @@ public class Product
     public Brand? Brand { get; set; }
 
     public ICollection<ProductVariant> Variants { get; set; } = new List<ProductVariant>();
+    
+    // Product type-specific specifications
+    public SunglassesSpec? SunglassesSpec { get; set; }
     public FrameSpec? FrameSpec { get; set; }
-    public ContactLensSpec? ContactLensSpec { get; set; }
     public RxLensSpec? RxLensSpec { get; set; }
+    public ContactLensSpec? ContactLensSpec { get; set; }
+    
     public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
 }

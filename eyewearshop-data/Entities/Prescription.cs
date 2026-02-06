@@ -29,5 +29,4 @@ public class Prescription
     public short Status { get; set; } = 1; // 1 = active, 0 = inactive
     
     public User Customer { get; set; } = null!;
-    public ICollection<Order> Orders { get; set; } = new List<Order>();
 }

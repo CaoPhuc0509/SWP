@@ -17,6 +17,17 @@ namespace eyewearshop_api
 
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
+
+            // Add session support for shopping cart
+            builder.Services.AddDistributedMemoryCache();
+            builder.Services.AddSession(options =>
+            {
+                options.IdleTimeout = TimeSpan.FromMinutes(30);
+                options.Cookie.HttpOnly = true;
+                options.Cookie.IsEssential = true;
+                options.Cookie.SameSite = SameSiteMode.Lax;
+            });
+            builder.Services.AddHttpContextAccessor();
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "eyewearshop-api", Version = "v1" });
@@ -55,6 +66,7 @@ namespace eyewearshop_api
 
             builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
             builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+            builder.Services.AddScoped<eyewearshop_service.Cart.ISessionCartService, eyewearshop_service.Cart.SessionCartService>();
 
             builder.Services.AddHttpClient<eyewearshop_service.VietQr.IVietQrClient, eyewearshop_service.VietQr.VietQrClient>();
 
@@ -81,13 +93,15 @@ namespace eyewearshop_api
 
             var app = builder.Build();
 
-            if (app.Environment.IsDevelopment())
+            if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
 
             app.UseHttpsRedirection();
+
+            app.UseSession();
 
             app.UseAuthentication();
             app.UseAuthorization();

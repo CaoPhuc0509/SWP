@@ -102,28 +102,35 @@ public class CatalogController : ControllerBase
                 query = query.Where(p => p.Variants.Any(v => v.Price <= maxPrice.Value));
         }
 
-        // Filter by frame size attributes (for frames only)
+        // Filter by frame size attributes (for frames and sunglasses)
         if (minA.HasValue || maxA.HasValue || minB.HasValue || maxB.HasValue || minDbl.HasValue || maxDbl.HasValue)
         {
-            query = query.Where(p => p.ProductType == ProductTypes.Frame && p.FrameSpec != null);
+            query = query.Where(p => (p.ProductType == ProductTypes.Frame && p.FrameSpec != null) ||
+                                     (p.ProductType == ProductTypes.Sunglasses && p.SunglassesSpec != null));
 
             if (minA.HasValue)
-                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.A >= minA.Value);
+                query = query.Where(p => (p.FrameSpec != null && p.FrameSpec.A >= minA.Value) ||
+                                         (p.SunglassesSpec != null && p.SunglassesSpec.A >= minA.Value));
 
             if (maxA.HasValue)
-                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.A <= maxA.Value);
+                query = query.Where(p => (p.FrameSpec != null && p.FrameSpec.A <= maxA.Value) ||
+                                         (p.SunglassesSpec != null && p.SunglassesSpec.A <= maxA.Value));
 
             if (minB.HasValue)
-                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.B >= minB.Value);
+                query = query.Where(p => (p.FrameSpec != null && p.FrameSpec.B >= minB.Value) ||
+                                         (p.SunglassesSpec != null && p.SunglassesSpec.B >= minB.Value));
 
             if (maxB.HasValue)
-                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.B <= maxB.Value);
+                query = query.Where(p => (p.FrameSpec != null && p.FrameSpec.B <= maxB.Value) ||
+                                         (p.SunglassesSpec != null && p.SunglassesSpec.B <= maxB.Value));
 
             if (minDbl.HasValue)
-                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.Dbl >= minDbl.Value);
+                query = query.Where(p => (p.FrameSpec != null && p.FrameSpec.Dbl >= minDbl.Value) ||
+                                         (p.SunglassesSpec != null && p.SunglassesSpec.Dbl >= minDbl.Value));
 
             if (maxDbl.HasValue)
-                query = query.Where(p => p.FrameSpec != null && p.FrameSpec.Dbl <= maxDbl.Value);
+                query = query.Where(p => (p.FrameSpec != null && p.FrameSpec.Dbl <= maxDbl.Value) ||
+                                         (p.SunglassesSpec != null && p.SunglassesSpec.Dbl <= maxDbl.Value));
         }
 
         var total = await query.CountAsync(ct);
@@ -194,6 +201,10 @@ public class CatalogController : ControllerBase
                     {
                         v.VariantId,
                         v.Color,
+                        v.RefractiveIndex, // For RxLens variants
+                        v.BaseCurve, // For Contact Lens variants (if different from product)
+                        v.Diameter, // For Contact Lens variants (if different from product)
+                        v.VariantSku,
                         v.Price,
                         v.StockQuantity,
                         v.PreOrderQuantity,
@@ -206,17 +217,27 @@ public class CatalogController : ControllerBase
                     p.FrameSpec.A,
                     p.FrameSpec.B,
                     p.FrameSpec.Dbl,
+                    p.FrameSpec.TempleLength,
+                    p.FrameSpec.LensWidth,
                     p.FrameSpec.Shape,
-                    p.FrameSpec.Weight
+                    p.FrameSpec.Weight,
+                    p.FrameSpec.HingeType,
+                    p.FrameSpec.HasNosePads
                 },
-                ContactLensSpec = p.ContactLensSpec == null ? null : new
+                SunglassesSpec = p.SunglassesSpec == null ? null : new
                 {
-                    p.ContactLensSpec.MinSphere,
-                    p.ContactLensSpec.MaxSphere,
-                    p.ContactLensSpec.MinCylinder,
-                    p.ContactLensSpec.MaxCylinder,
-                    p.ContactLensSpec.BaseCurve,
-                    p.ContactLensSpec.Diameter
+                    p.SunglassesSpec.RimType,
+                    p.SunglassesSpec.Material,
+                    p.SunglassesSpec.A,
+                    p.SunglassesSpec.B,
+                    p.SunglassesSpec.Dbl,
+                    p.SunglassesSpec.TempleLength,
+                    p.SunglassesSpec.Shape,
+                    p.SunglassesSpec.Weight,
+                    p.SunglassesSpec.LensMaterial,
+                    p.SunglassesSpec.LensType,
+                    p.SunglassesSpec.UvProtection,
+                    p.SunglassesSpec.TintColor
                 },
                 RxLensSpec = p.RxLensSpec == null ? null : new
                 {
@@ -227,8 +248,34 @@ public class CatalogController : ControllerBase
                     p.RxLensSpec.MaxSphere,
                     p.RxLensSpec.MinCylinder,
                     p.RxLensSpec.MaxCylinder,
-                    p.RxLensSpec.FeatureId,
-                    FeatureName = p.RxLensSpec.Feature != null ? p.RxLensSpec.Feature.Name : null
+                    p.RxLensSpec.MinAxis,
+                    p.RxLensSpec.MaxAxis,
+                    p.RxLensSpec.MinAdd,
+                    p.RxLensSpec.MaxAdd,
+                    Features = p.RxLensSpec.RxLensSpecFeatures
+                        .Select(x => new { x.FeatureId, x.Feature.Name }),
+                    p.RxLensSpec.HasAntiReflective,
+                    p.RxLensSpec.HasBlueLightFilter,
+                    p.RxLensSpec.HasUVProtection,
+                    p.RxLensSpec.HasScratchResistant
+                },
+                ContactLensSpec = p.ContactLensSpec == null ? null : new
+                {
+                    p.ContactLensSpec.BaseCurve,
+                    p.ContactLensSpec.Diameter,
+                    p.ContactLensSpec.MinSphere,
+                    p.ContactLensSpec.MaxSphere,
+                    p.ContactLensSpec.MinCylinder,
+                    p.ContactLensSpec.MaxCylinder,
+                    p.ContactLensSpec.MinAxis,
+                    p.ContactLensSpec.MaxAxis,
+                    p.ContactLensSpec.LensType,
+                    p.ContactLensSpec.Material,
+                    p.ContactLensSpec.WaterContent,
+                    p.ContactLensSpec.OxygenPermeability,
+                    p.ContactLensSpec.ReplacementSchedule,
+                    p.ContactLensSpec.IsToric,
+                    p.ContactLensSpec.IsMultifocal
                 }
             })
             .FirstOrDefaultAsync(ct);

@@ -27,11 +27,14 @@ public class EyewearShopDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<OrderPrescription> OrderPrescriptions => Set<OrderPrescription>();
 
     public DbSet<Feature> Features => Set<Feature>();
+    public DbSet<RxLensSpecFeature> RxLensSpecFeatures => Set<RxLensSpecFeature>();
+    public DbSet<SunglassesSpec> SunglassesSpecs => Set<SunglassesSpec>();
     public DbSet<FrameSpec> FrameSpecs => Set<FrameSpec>();
-    public DbSet<ContactLensSpec> ContactLensSpecs => Set<ContactLensSpec>();
     public DbSet<RxLensSpec> RxLensSpecs => Set<RxLensSpec>();
+    public DbSet<ContactLensSpec> ContactLensSpecs => Set<ContactLensSpec>();
 
     public DbSet<Prescription> Prescriptions => Set<Prescription>();
     public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
@@ -160,16 +163,32 @@ public class EyewearShopDbContext : DbContext
             e.HasKey(x => x.VariantId);
             e.Property(x => x.VariantId).HasColumnName("variant_id");
             e.Property(x => x.ProductId).HasColumnName("product_id").IsRequired();
+            
+            // Variant-specific attributes
             e.Property(x => x.Color).HasColumnName("color").HasMaxLength(255);
+            
+            // For RxLens: Refractive index varies by variant
+            e.Property(x => x.RefractiveIndex).HasColumnName("refractive_index");
+            
+            // For Contact Lenses: Base curve and diameter can vary by variant
+            e.Property(x => x.BaseCurve).HasColumnName("base_curve");
+            e.Property(x => x.Diameter).HasColumnName("diameter");
+            
+            // Pricing and inventory
             e.Property(x => x.Price).HasColumnName("price");
             e.Property(x => x.StockQuantity).HasColumnName("stock_quantity");
             e.Property(x => x.PreOrderQuantity).HasColumnName("pre_order_quantity");
             e.Property(x => x.ExpectedDateRestock).HasColumnName("expected_date_restock");
+            
+            // Variant SKU
+            e.Property(x => x.VariantSku).HasColumnName("variant_sku").HasMaxLength(255);
+            
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.Property(x => x.Status).HasColumnName("status");
 
             e.HasIndex(x => x.ProductId);
+            e.HasIndex(x => x.VariantSku);
 
             e.HasOne(x => x.Product)
                 .WithMany(p => p.Variants)
@@ -272,7 +291,6 @@ public class EyewearShopDbContext : DbContext
             e.Property(x => x.OrderNumber).HasColumnName("order_number").HasMaxLength(50).IsRequired();
             e.Property(x => x.OrderType).HasColumnName("order_type").HasMaxLength(30).IsRequired();
             e.Property(x => x.Status).HasColumnName("status");
-            e.Property(x => x.PrescriptionId).HasColumnName("prescription_id");
             e.Property(x => x.PromotionId).HasColumnName("promotion_id");
             e.Property(x => x.SubTotal).HasColumnName("sub_total");
             e.Property(x => x.ShippingFee).HasColumnName("shipping_fee");
@@ -285,17 +303,12 @@ public class EyewearShopDbContext : DbContext
 
             e.HasIndex(x => x.OrderNumber).IsUnique();
             e.HasIndex(x => x.CustomerId);
-            e.HasIndex(x => x.PrescriptionId);
             e.HasIndex(x => x.PromotionId);
             e.HasIndex(x => x.OrderType);
 
             e.HasOne(x => x.Customer)
                 .WithMany()
                 .HasForeignKey(x => x.CustomerId);
-
-            e.HasOne(x => x.Prescription)
-                .WithMany(p => p.Orders)
-                .HasForeignKey(x => x.PrescriptionId);
 
             e.HasOne(x => x.Promotion)
                 .WithMany(p => p.Orders)
@@ -305,6 +318,44 @@ public class EyewearShopDbContext : DbContext
                 .WithOne(s => s.Order)
                 .HasForeignKey<ShippingInfo>(s => s.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OrderPrescription>(e =>
+        {
+            e.ToTable("order_prescriptions");
+            e.HasKey(x => x.OrderId);
+
+            e.Property(x => x.OrderId).HasColumnName("order_id");
+            e.Property(x => x.CustomerId).HasColumnName("customer_id").IsRequired();
+            e.Property(x => x.SavedPrescriptionId).HasColumnName("saved_prescription_id");
+
+            e.Property(x => x.RightSphere).HasColumnName("right_sphere");
+            e.Property(x => x.RightCylinder).HasColumnName("right_cylinder");
+            e.Property(x => x.RightAxis).HasColumnName("right_axis");
+            e.Property(x => x.RightAdd).HasColumnName("right_add");
+            e.Property(x => x.RightPD).HasColumnName("right_pd");
+
+            e.Property(x => x.LeftSphere).HasColumnName("left_sphere");
+            e.Property(x => x.LeftCylinder).HasColumnName("left_cylinder");
+            e.Property(x => x.LeftAxis).HasColumnName("left_axis");
+            e.Property(x => x.LeftAdd).HasColumnName("left_add");
+            e.Property(x => x.LeftPD).HasColumnName("left_pd");
+
+            e.Property(x => x.Notes).HasColumnName("notes");
+            e.Property(x => x.PrescriptionDate).HasColumnName("prescription_date");
+            e.Property(x => x.PrescribedBy).HasColumnName("prescribed_by").HasMaxLength(255);
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+            e.HasIndex(x => x.CustomerId);
+
+            e.HasOne(x => x.Order)
+                .WithOne(o => o.OrderPrescription)
+                .HasForeignKey<OrderPrescription>(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Customer)
+                .WithMany()
+                .HasForeignKey(x => x.CustomerId);
         });
 
         modelBuilder.Entity<OrderItem>(e =>
@@ -369,18 +420,59 @@ public class EyewearShopDbContext : DbContext
             e.Property(x => x.Status).HasColumnName("status");
         });
 
-        modelBuilder.Entity<FrameSpec>(e =>
+        modelBuilder.Entity<SunglassesSpec>(e =>
         {
-            e.ToTable("frame_specs");
+            e.ToTable("sunglasses_specs");
             e.HasKey(x => x.ProductId);
             e.Property(x => x.ProductId).HasColumnName("product_id");
+            
+            // Frame specifications
             e.Property(x => x.RimType).HasColumnName("rim_type").HasMaxLength(50);
             e.Property(x => x.Material).HasColumnName("material").HasMaxLength(255);
             e.Property(x => x.A).HasColumnName("a");
             e.Property(x => x.B).HasColumnName("b");
             e.Property(x => x.Dbl).HasColumnName("dbl");
+            e.Property(x => x.TempleLength).HasColumnName("temple_length");
             e.Property(x => x.Shape).HasColumnName("shape").HasMaxLength(50);
             e.Property(x => x.Weight).HasColumnName("weight");
+            
+            // Lens specifications
+            e.Property(x => x.LensMaterial).HasColumnName("lens_material").HasMaxLength(255);
+            e.Property(x => x.LensType).HasColumnName("lens_type").HasMaxLength(100);
+            e.Property(x => x.UvProtection).HasColumnName("uv_protection");
+            e.Property(x => x.TintColor).HasColumnName("tint_color").HasMaxLength(100);
+            
+            e.Property(x => x.Status).HasColumnName("status");
+
+            e.HasOne(x => x.Product)
+                .WithOne(p => p.SunglassesSpec)
+                .HasForeignKey<SunglassesSpec>(x => x.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FrameSpec>(e =>
+        {
+            e.ToTable("frame_specs");
+            e.HasKey(x => x.ProductId);
+            e.Property(x => x.ProductId).HasColumnName("product_id");
+            
+            // Frame structure
+            e.Property(x => x.RimType).HasColumnName("rim_type").HasMaxLength(50);
+            e.Property(x => x.Material).HasColumnName("material").HasMaxLength(255);
+            e.Property(x => x.Shape).HasColumnName("shape").HasMaxLength(50);
+            e.Property(x => x.Weight).HasColumnName("weight");
+            
+            // Frame dimensions (at product level)
+            e.Property(x => x.A).HasColumnName("a");
+            e.Property(x => x.B).HasColumnName("b");
+            e.Property(x => x.Dbl).HasColumnName("dbl");
+            e.Property(x => x.TempleLength).HasColumnName("temple_length");
+            e.Property(x => x.LensWidth).HasColumnName("lens_width");
+            
+            // Additional specifications
+            e.Property(x => x.HingeType).HasColumnName("hinge_type").HasMaxLength(50);
+            e.Property(x => x.HasNosePads).HasColumnName("has_nose_pads");
+            
             e.Property(x => x.Status).HasColumnName("status");
 
             e.HasOne(x => x.Product)
@@ -394,12 +486,30 @@ public class EyewearShopDbContext : DbContext
             e.ToTable("contact_lens_specs");
             e.HasKey(x => x.ProductId);
             e.Property(x => x.ProductId).HasColumnName("product_id");
+            
+            // Physical specifications (at product level)
+            e.Property(x => x.BaseCurve).HasColumnName("base_curve");
+            e.Property(x => x.Diameter).HasColumnName("diameter");
+            
+            // Prescription ranges (at product level)
             e.Property(x => x.MinSphere).HasColumnName("min_sphere");
             e.Property(x => x.MaxSphere).HasColumnName("max_sphere");
             e.Property(x => x.MinCylinder).HasColumnName("min_cylinder");
             e.Property(x => x.MaxCylinder).HasColumnName("max_cylinder");
-            e.Property(x => x.BaseCurve).HasColumnName("base_curve");
-            e.Property(x => x.Diameter).HasColumnName("diameter");
+            e.Property(x => x.MinAxis).HasColumnName("min_axis");
+            e.Property(x => x.MaxAxis).HasColumnName("max_axis");
+            
+            // Lens type and material
+            e.Property(x => x.LensType).HasColumnName("lens_type").HasMaxLength(50);
+            e.Property(x => x.Material).HasColumnName("material").HasMaxLength(255);
+            e.Property(x => x.WaterContent).HasColumnName("water_content");
+            e.Property(x => x.OxygenPermeability).HasColumnName("oxygen_permeability");
+            
+            // Usage specifications
+            e.Property(x => x.ReplacementSchedule).HasColumnName("replacement_schedule");
+            e.Property(x => x.IsToric).HasColumnName("is_toric");
+            e.Property(x => x.IsMultifocal).HasColumnName("is_multifocal");
+            
             e.Property(x => x.Status).HasColumnName("status");
 
             e.HasOne(x => x.Product)
@@ -413,23 +523,54 @@ public class EyewearShopDbContext : DbContext
             e.ToTable("rx_lens_specs");
             e.HasKey(x => x.ProductId);
             e.Property(x => x.ProductId).HasColumnName("product_id");
+            
+            // Lens design and material (at product level)
             e.Property(x => x.DesignType).HasColumnName("design_type").HasMaxLength(50);
             e.Property(x => x.Material).HasColumnName("material").HasMaxLength(255);
             e.Property(x => x.LensWidth).HasColumnName("lens_width");
+            
+            // Prescription ranges (at product level)
             e.Property(x => x.MinSphere).HasColumnName("min_sphere");
             e.Property(x => x.MaxSphere).HasColumnName("max_sphere");
             e.Property(x => x.MinCylinder).HasColumnName("min_cylinder");
             e.Property(x => x.MaxCylinder).HasColumnName("max_cylinder");
-            e.Property(x => x.FeatureId).HasColumnName("feature_id");
+            e.Property(x => x.MinAxis).HasColumnName("min_axis");
+            e.Property(x => x.MaxAxis).HasColumnName("max_axis");
+            e.Property(x => x.MinAdd).HasColumnName("min_add");
+            e.Property(x => x.MaxAdd).HasColumnName("max_add");
+            
+            // Coating options
+            e.Property(x => x.HasAntiReflective).HasColumnName("has_anti_reflective");
+            e.Property(x => x.HasBlueLightFilter).HasColumnName("has_blue_light_filter");
+            e.Property(x => x.HasUVProtection).HasColumnName("has_uv_protection");
+            e.Property(x => x.HasScratchResistant).HasColumnName("has_scratch_resistant");
+            
             e.Property(x => x.Status).HasColumnName("status");
-
-            e.HasOne(x => x.Feature)
-                .WithMany(f => f.RxLensSpecs)
-                .HasForeignKey(x => x.FeatureId);
 
             e.HasOne(x => x.Product)
                 .WithOne(p => p.RxLensSpec)
                 .HasForeignKey<RxLensSpec>(x => x.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RxLensSpecFeature>(e =>
+        {
+            e.ToTable("rx_lens_spec_features");
+            e.HasKey(x => new { x.ProductId, x.FeatureId });
+
+            e.Property(x => x.ProductId).HasColumnName("product_id");
+            e.Property(x => x.FeatureId).HasColumnName("feature_id");
+
+            e.HasIndex(x => x.FeatureId);
+
+            e.HasOne(x => x.RxLensSpec)
+                .WithMany(s => s.RxLensSpecFeatures)
+                .HasForeignKey(x => x.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Feature)
+                .WithMany(f => f.RxLensSpecFeatures)
+                .HasForeignKey(x => x.FeatureId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
