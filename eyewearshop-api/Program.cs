@@ -3,6 +3,7 @@ using System.Reflection;
 using eyewearshop_data;
 using eyewearshop_service;
 using eyewearshop_service.Auth;
+using eyewearshop_service.Policy;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -76,6 +77,7 @@ namespace eyewearshop_api
             builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
             builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
             builder.Services.AddScoped<eyewearshop_service.Cart.ISessionCartService, eyewearshop_service.Cart.SessionCartService>();
+            builder.Services.AddScoped<IPolicyManager, PolicyManager>();
 
             builder.Services.AddHttpClient<eyewearshop_service.VietQr.IVietQrClient, eyewearshop_service.VietQr.VietQrClient>();
 
