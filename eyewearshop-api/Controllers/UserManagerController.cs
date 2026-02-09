@@ -183,20 +183,20 @@ public class UserManagerController : ControllerBase
     }
 
     /// <summary>
-    /// deactivate user account
+    /// update user account status (deactivate/activate) - delete account 
     /// </summary>
-    [HttpDelete("{userId}")]
-    public async Task<ActionResult> DeactivateUser([FromRoute] long userId, CancellationToken ct)
+    [HttpPatch("{userId}/status")]
+    public async Task<ActionResult> UpdateUserStatus([FromRoute] long userId, [FromBody] UpdateUserStatusRequest request, CancellationToken ct)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == userId, ct);
         if (user == null)
             return NotFound();
 
-        user.Status = 0;
+        user.Status = request.Status;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
-        return Ok();
+        return Ok(new { Message = $"User status updated to {request.Status}" });
     }
 
     /// <summary>
@@ -229,4 +229,5 @@ public class UserManagerController : ControllerBase
 
 public record CreateStaffRequest(string Email, string Password, string? FullName, string? PhoneNumber, int RoleId);
 public record UpdateStaffRequest(string? FullName, string? PhoneNumber, int RoleId, short Status);
+public record UpdateUserStatusRequest(short Status);
 public record ResetPasswordRequest(string NewPassword);
