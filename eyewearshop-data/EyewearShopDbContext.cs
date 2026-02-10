@@ -27,6 +27,7 @@ public class EyewearShopDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<OrderPrescription> OrderPrescriptions => Set<OrderPrescription>();
 
     public DbSet<Feature> Features => Set<Feature>();
@@ -408,6 +409,35 @@ public class EyewearShopDbContext : DbContext
             e.HasOne(x => x.Customer)
                 .WithMany()
                 .HasForeignKey(x => x.CustomerId);
+        });
+
+        modelBuilder.Entity<PaymentTransaction>(e =>
+        {
+            e.ToTable("payment_transactions");
+            e.HasKey(x => x.PaymentTransactionId);
+
+            e.Property(x => x.PaymentTransactionId).HasColumnName("payment_transaction_id");
+            e.Property(x => x.OrderId).HasColumnName("order_id").IsRequired();
+            e.Property(x => x.Gateway).HasColumnName("gateway").HasMaxLength(50).IsRequired();
+            e.Property(x => x.GatewayTransactionId).HasColumnName("gateway_transaction_id").HasMaxLength(100);
+            e.Property(x => x.RequestId).HasColumnName("request_id").HasMaxLength(100).IsRequired();
+            e.Property(x => x.Amount).HasColumnName("amount");
+            e.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(10);
+            e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            e.Property(x => x.PaidAt).HasColumnName("paid_at");
+            e.Property(x => x.RawRequest).HasColumnName("raw_request");
+            e.Property(x => x.RawResponse).HasColumnName("raw_response");
+
+            e.HasIndex(x => x.OrderId);
+            e.HasIndex(x => x.RequestId).IsUnique();
+            e.HasIndex(x => x.GatewayTransactionId);
+
+            e.HasOne(x => x.Order)
+                .WithMany(o => o.PaymentTransactions)
+                .HasForeignKey(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Feature>(e =>
