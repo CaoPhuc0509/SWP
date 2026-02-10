@@ -2,11 +2,11 @@ using eyewearshop_data;
 
 namespace eyewearshop_service.Policy;
 
-public class PolicyManager : IPolicyManager
+public class PolicyService : IPolicyManager
 {
     private readonly EyewearShopDbContext _db;
 
-    public PolicyManager(EyewearShopDbContext db)
+    public PolicyService(EyewearShopDbContext db)
     {
         _db = db;
     }

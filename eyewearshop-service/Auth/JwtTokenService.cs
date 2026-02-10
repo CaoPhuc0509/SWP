@@ -2,15 +2,11 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using eyewearshop_data.Entities;
+using eyewearshop_service.Interfaces;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace eyewearshop_service.Auth;
-
-public interface IJwtTokenService
-{
-    string CreateAccessToken(User user, string roleName);
-}
 
 public class JwtTokenService : IJwtTokenService
 {
