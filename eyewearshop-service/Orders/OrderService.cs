@@ -1,3 +1,4 @@
+using eyewearshop_data;
 using eyewearshop_data.Entities;
 using eyewearshop_data.Interfaces;
 using eyewearshop_service.Interfaces;
@@ -165,6 +166,45 @@ public class OrderService : IOrderService
             .FirstOrDefaultAsync(ct);
 
         return order;
+    }
+    public async Task ChangeStatusAsync(Guid orderId, short newStatus, string role)
+    {
+        var order = await _context.Orders.FindAsync(orderId);
+        if (order == null)
+            throw new Exception("Order not found");
+
+        if (!IsValidTransition(order.Status, newStatus, role))
+            throw new Exception("You are not allowed to change this order status");
+
+        order.Status = newStatus;
+        await _context.SaveChangesAsync();
+    }
+
+    private bool IsValidTransition(short current, short next, string role)
+    {
+        // SALES STAFF
+        if (role == RoleNames.SalesSupport)
+        {
+            return
+                (current == OrderStatuses.Pending && next == OrderStatuses.Validated) ||
+                (current == OrderStatuses.Validated && next == OrderStatuses.Confirmed) ||
+                (current == OrderStatuses.Confirmed && next == OrderStatuses.Cancelled) ||
+                (current == OrderStatuses.Shipped && next == OrderStatuses.Completed) ||
+                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
+        }
+
+        // OPERATION STAFF
+        if (role == RoleNames.Operations)
+        {
+            return
+                (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
+                (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
+                (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+        }
+
+        return false;
     }
 }
 
