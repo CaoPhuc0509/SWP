@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using eyewearshop_data;
 using eyewearshop_data.Entities;
 using eyewearshop_service.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -65,5 +66,17 @@ public class OrderController : ControllerBase
         if (!long.TryParse(userIdClaim, out var userId))
             throw new InvalidOperationException("Missing user id claim.");
         return userId;
+    }
+
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
+    [HttpPut("{id}/status")]
+    public async Task<IActionResult> ChangeStatus(
+   long id,
+   [FromBody] ChangeOrderStatusRequest request)
+    {
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        await _orderService.ChangeStatusAsync(id, request.NewStatus, role);
+        return Ok("Order status updated successfully");
     }
 }

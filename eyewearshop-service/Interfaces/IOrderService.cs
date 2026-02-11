@@ -14,5 +14,7 @@ public interface IOrderService
         long customerId,
         long orderId,
         CancellationToken ct = default);
+    Task ChangeStatusAsync(long orderId, short newStatus, string role);
+
 }
 
