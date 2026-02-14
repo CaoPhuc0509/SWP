@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using eyewearshop_service.Return;
 
 namespace eyewearshop_api
 {
@@ -94,6 +95,7 @@ namespace eyewearshop_api
             builder.Services.AddScoped<ICatalogService, CatalogService>();
             builder.Services.AddScoped<IOrderService, OrderService>();
             builder.Services.AddScoped<IPaymentService, PaymentService>();
+            builder.Services.AddScoped<IReturnService, ReturnService>();
 
             builder.Services.AddHttpClient<eyewearshop_service.VietQr.IVietQrClient, eyewearshop_service.VietQr.VietQrClient>();
 
