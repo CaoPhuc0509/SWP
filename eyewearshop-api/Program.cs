@@ -28,6 +28,18 @@ namespace eyewearshop_api
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
 
+            // Add CORS support for React frontend
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowReactApp", policy =>
+                {
+                    policy.WithOrigins("http://localhost:5173", "https://localhost:5173")
+                          .AllowAnyMethod()
+                          .AllowAnyHeader()
+                          .AllowCredentials(); // Required for session cookies
+                });
+            });
+
             // Add session support for shopping cart
             builder.Services.AddDistributedMemoryCache();
             builder.Services.AddSession(options =>
@@ -139,6 +151,9 @@ namespace eyewearshop_api
             }
 
             app.UseHttpsRedirection();
+
+            // Enable CORS before session and authentication
+            app.UseCors("AllowReactApp");
 
             app.UseSession();
 
