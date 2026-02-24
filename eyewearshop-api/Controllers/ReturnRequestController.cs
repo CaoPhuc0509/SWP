@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using eyewearshop_data;
 using eyewearshop_data.Entities;
+using eyewearshop_service.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,9 +12,14 @@ namespace eyewearshop_api.Controllers;
 [Route("api/return-requests")]
 [Authorize]
 public class ReturnRequestController : ControllerBase
-{
+{   
     private readonly EyewearShopDbContext _db;
+    private readonly IReturnService _returnService;
 
+    public ReturnRequestController(IReturnService returnService)
+    {
+        _returnService = returnService;
+    }
     public ReturnRequestController(EyewearShopDbContext db)
     {
         _db = db;
@@ -249,7 +255,16 @@ public class ReturnRequestController : ControllerBase
             returnRequest.Status
         });
     }
+    [HttpPut("{id}/status")]
+    [Authorize(Roles = RoleNames.Admin)]
+    public async Task<IActionResult> ChangeStatus(long id, [FromBody] short newStatus)
+    {
+        var role = User.FindFirst("role")?.Value;
 
+        await _returnService.ChangeReturnStatusAsync(id, newStatus, role);
+
+        return Ok(new { message = "Return status updated successfully" });
+    }
     private long GetUserIdOrThrow()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
