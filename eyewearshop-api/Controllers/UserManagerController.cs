@@ -17,22 +17,43 @@ public class UserManagerController : ControllerBase
     {
         _db = db;
     }
+    /// <summary>
+    /// Get all users
+    /// </summary>
+    [HttpGet]
+    public async Task<ActionResult> GetAllUsers(CancellationToken ct = default)
+    {
+        var users = await _db.Users
+            .AsNoTracking()
+            .Include(u => u.Role)
+            .Select(u => new
+            {
+                u.UserId,
+                u.Email,
+                u.FullName,
+                u.PhoneNumber,
+                u.Gender,
+                u.DateOfBirth,
+                Role = u.Role.RoleName,
+                u.Status,
+                u.CreatedAt,
+                u.UpdatedAt
+            })
+            .ToListAsync(ct);
+
+        return Ok(users);
+    }
 
     /// <summary>
     /// Get staff list
     /// </summary>
     [HttpGet("staff")]
-    public async Task<ActionResult> GetStaff([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<ActionResult> GetStaff(CancellationToken ct = default)
     {
-        var query = _db.Users
+        var staff = await _db.Users
             .AsNoTracking()
             .Include(u => u.Role)
-            .Where(u => u.Role.RoleName != "Customer");
-
-        var total = await query.CountAsync(ct);
-        var staff = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Where(u => u.Role.RoleName != "Customer")
             .Select(u => new
             {
                 u.UserId,
@@ -45,27 +66,19 @@ public class UserManagerController : ControllerBase
             })
             .ToListAsync(ct);
 
-        return Ok(new { Page = page, PageSize = pageSize, Total = total, Items = staff });
+        return Ok(staff);
     }
 
     /// <summary>
     /// Get customers list
     /// </summary>
     [HttpGet("customers")]
-    public async Task<ActionResult> GetCustomers([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<ActionResult> GetCustomers(CancellationToken ct = default)
     {
-        var total = await _db.Users
-            .AsNoTracking()
-            .Include(u => u.Role)
-            .Where(u => u.Role.RoleName == "Customer")
-            .CountAsync(ct);
-
         var customers = await _db.Users
             .AsNoTracking()
             .Include(u => u.Role)
             .Where(u => u.Role.RoleName == "Customer")
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
             .Select(u => new
             {
                 u.UserId,
@@ -77,7 +90,7 @@ public class UserManagerController : ControllerBase
             })
             .ToListAsync(ct);
 
-        return Ok(new { Page = page, PageSize = pageSize, Total = total, Items = customers });
+        return Ok(customers);
     }
 
     /// <summary>
@@ -100,6 +113,8 @@ public class UserManagerController : ControllerBase
             PasswordHash = HashPassword(request.Password),
             FullName = request.FullName,
             PhoneNumber = request.PhoneNumber,
+            Gender = request.Gender,
+            DateOfBirth = request.DateOfBirth,
             RoleId = request.RoleId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -161,11 +176,20 @@ public class UserManagerController : ControllerBase
         if (user == null)
             return NotFound();
 
+        if (!string.IsNullOrEmpty(request.Email))
+            user.Email = request.Email;
+
         if (!string.IsNullOrEmpty(request.FullName))
             user.FullName = request.FullName;
 
         if (!string.IsNullOrEmpty(request.PhoneNumber))
             user.PhoneNumber = request.PhoneNumber;
+
+        if (!string.IsNullOrEmpty(request.Gender))
+            user.Gender = request.Gender;
+
+        if (request.DateOfBirth.HasValue)
+            user.DateOfBirth = request.DateOfBirth;
 
         if (request.RoleId > 0)
         {
@@ -227,7 +251,7 @@ public class UserManagerController : ControllerBase
     }
 }
 
-public record CreateStaffRequest(string Email, string Password, string? FullName, string? PhoneNumber, int RoleId);
-public record UpdateStaffRequest(string? FullName, string? PhoneNumber, int RoleId, short Status);
+public record CreateStaffRequest(string Email, string Password, string? FullName, string? PhoneNumber, string? Gender, DateOnly? DateOfBirth, int RoleId);
+public record UpdateStaffRequest(string? Email, string? FullName, string? PhoneNumber, string? Gender, DateOnly? DateOfBirth, int RoleId, short Status);
 public record UpdateUserStatusRequest(short Status);
 public record ResetPasswordRequest(string NewPassword);

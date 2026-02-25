@@ -44,26 +44,26 @@ public class RevenueManagerController : ControllerBase
     }
 
     /// <summary>
-    /// Revenue by month
+    /// Revenue by month - returns daily revenue for the specified month and year
     /// </summary>
     [HttpGet("monthly")]
-    public async Task<ActionResult> GetMonthlyRevenue([FromQuery] int? year, CancellationToken ct = default)
+    public async Task<ActionResult> GetMonthlyRevenue([FromQuery] int? month, [FromQuery] int? year, CancellationToken ct = default)
     {
         year ??= DateTime.UtcNow.Year;
-
         var data = await _db.Orders
             .AsNoTracking()
-            .Where(o => o.CreatedAt.Year == year)
-            .GroupBy(o => o.CreatedAt.Month)
+            .Where(o => o.CreatedAt.Year == year && o.CreatedAt.Month == month)
+            .GroupBy(o => o.CreatedAt.Date)
             .Select(g => new
             {
-                Month = g.Key,
+                Date = g.Key,
+                Month = month,
                 Year = year,
                 TotalRevenue = g.Sum(o => o.TotalAmount),
                 OrderCount = g.Count(),
                 AvgOrderValue = g.Average(o => o.TotalAmount)
             })
-            .OrderBy(x => x.Month)
+            .OrderBy(x => x.Date)
             .ToListAsync(ct);
 
         return Ok(data);
@@ -98,7 +98,7 @@ public class RevenueManagerController : ControllerBase
     /// Top products by revenue
     /// </summary>
     [HttpGet("top-products")]
-    public async Task<ActionResult> GetTopProducts([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] int limit = 10, CancellationToken ct = default)
+    public async Task<ActionResult> GetTopProducts([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] int limit, CancellationToken ct = default)
     {
         startDate ??= DateTime.UtcNow.AddDays(-30);
         endDate ??= DateTime.UtcNow;

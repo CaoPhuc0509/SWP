@@ -21,13 +21,10 @@ public class ProductManagerController : ControllerBase
     /// get products list
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult> GetProducts([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<ActionResult> GetProducts(CancellationToken ct = default)
     {
-        var total = await _db.Products.CountAsync(ct);
         var products = await _db.Products
             .AsNoTracking()
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
             .Select(p => new
             {
                 p.ProductId,
@@ -41,7 +38,7 @@ public class ProductManagerController : ControllerBase
             })
             .ToListAsync(ct);
 
-        return Ok(new { Page = page, PageSize = pageSize, Total = total, Items = products });
+        return Ok(products);
     }
 
     /// <summary>
@@ -78,7 +75,35 @@ public class ProductManagerController : ControllerBase
     {
         var product = await _db.Products
             .AsNoTracking()
+            .Include(p => p.Category)
+            .Include(p => p.Brand)
             .Include(p => p.Variants)
+            .Include(p => p.Images)
+            .Include(p => p.SunglassesSpec)
+            .Include(p => p.FrameSpec)
+            .Include(p => p.RxLensSpec)
+            .Include(p => p.ContactLensSpec)
+            .Select(p => new
+            {
+                p.ProductId,
+                p.ProductName,
+                p.Sku,
+                p.Description,
+                p.ProductType,
+                p.BasePrice,
+                p.Specifications,
+                Category = p.Category != null ? new { p.Category.CategoryId, p.Category.CategoryName } : null,
+                Brand = p.Brand != null ? new { p.Brand.BrandId, p.Brand.BrandName } : null,
+                p.Variants,
+                p.Images,
+                p.SunglassesSpec,
+                p.FrameSpec,
+                p.RxLensSpec,
+                p.ContactLensSpec,
+                p.Status,
+                p.CreatedAt,
+                p.UpdatedAt
+            })
             .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
         if (product == null)
@@ -97,9 +122,30 @@ public class ProductManagerController : ControllerBase
         if (product == null)
             return NotFound();
 
-        product.ProductName = request.ProductName;
-        product.Description = request.Description;
-        product.BasePrice = request.BasePrice;
+        if (!string.IsNullOrEmpty(request.ProductName))
+            product.ProductName = request.ProductName;
+
+        if (!string.IsNullOrEmpty(request.Sku))
+            product.Sku = request.Sku;
+
+        if (!string.IsNullOrEmpty(request.Description))
+            product.Description = request.Description;
+
+        if (!string.IsNullOrEmpty(request.ProductType))
+            product.ProductType = request.ProductType;
+
+        if (request.BasePrice.HasValue)
+            product.BasePrice = request.BasePrice;
+
+        if (request.CategoryId.HasValue)
+            product.CategoryId = request.CategoryId;
+
+        if (request.BrandId.HasValue)
+            product.BrandId = request.BrandId;
+
+        if (!string.IsNullOrEmpty(request.Specifications))
+            product.Specifications = request.Specifications;
+
         product.Status = request.Status;
         product.UpdatedAt = DateTime.UtcNow;
 
@@ -158,6 +204,6 @@ public class ProductManagerController : ControllerBase
 }
 
 public record CreateProductRequest(string ProductName, string Sku, string? Description, string ProductType, decimal? BasePrice, long? CategoryId, long? BrandId);
-public record UpdateProductRequest(string ProductName, string? Description, decimal? BasePrice, short Status);
+public record UpdateProductRequest(string? ProductName, string? Sku, string? Description, string? ProductType, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications, short Status);
 public record AddVariantRequest(string? Color, decimal Price, int StockQuantity, int PreOrderQuantity);
 public record UpdateVariantRequest(string? Color, decimal Price, int StockQuantity, int PreOrderQuantity, short Status);
