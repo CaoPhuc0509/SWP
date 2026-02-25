@@ -157,9 +157,15 @@ public class ProductManagerController : ControllerBase
     /// add variant to product (color, price, stockQuantity, preOrderQuantity)
     /// </summary>
     [HttpPost("{productId}/variants")]
-    public async Task<ActionResult> AddVariant([FromRoute] long productId, [FromBody] AddVariantRequest request, CancellationToken ct)
+    public async Task<ActionResult> AddVariant(
+     [FromRoute] long productId,
+     [FromBody] AddVariantRequest request,
+     CancellationToken ct)
     {
-        var product = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+        var product = await _db.Products
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+
         if (product == null)
             return NotFound("Product not found");
 
@@ -170,6 +176,11 @@ public class ProductManagerController : ControllerBase
             Price = request.Price,
             StockQuantity = request.StockQuantity,
             PreOrderQuantity = request.PreOrderQuantity,
+            VariantSku = request.VariantSku,
+            BaseCurve = request.BaseCurve,
+            Diameter = request.Diameter,
+            RefractiveIndex = request.RefractiveIndex,
+            ExpectedDateRestock = request.ExpectedDateRestock,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             Status = 1
@@ -178,16 +189,42 @@ public class ProductManagerController : ControllerBase
         _db.ProductVariants.Add(variant);
         await _db.SaveChangesAsync(ct);
 
-        return CreatedAtAction(nameof(GetProductDetail), new { productId }, variant);
+        // map sang DTO để tránh circular reference
+        var response = new VariantResponse(
+            variant.VariantId,
+            variant.ProductId,
+            variant.Color,
+            variant.Price,
+            variant.StockQuantity,
+            variant.PreOrderQuantity,
+            variant.VariantSku,
+            variant.BaseCurve,
+            variant.Diameter,
+            variant.RefractiveIndex,
+            variant.ExpectedDateRestock,
+            variant.Status
+        );
+
+        return CreatedAtAction(
+            nameof(GetProductDetail),
+            new { productId },
+            response
+        );
     }
 
     /// <summary>
     /// update variant of product
     /// </summary>
     [HttpPut("{productId}/variants/{variantId}")]
-    public async Task<ActionResult> UpdateVariant([FromRoute] long productId, [FromRoute] long variantId, [FromBody] UpdateVariantRequest request, CancellationToken ct)
+    public async Task<ActionResult> UpdateVariant(
+    [FromRoute] long productId,
+    [FromRoute] long variantId,
+    [FromBody] UpdateVariantRequest request,
+    CancellationToken ct)
     {
-        var variant = await _db.ProductVariants.FirstOrDefaultAsync(v => v.VariantId == variantId && v.ProductId == productId, ct);
+        var variant = await _db.ProductVariants
+            .FirstOrDefaultAsync(v => v.VariantId == variantId && v.ProductId == productId, ct);
+
         if (variant == null)
             return NotFound();
 
@@ -195,6 +232,11 @@ public class ProductManagerController : ControllerBase
         variant.Price = request.Price;
         variant.StockQuantity = request.StockQuantity;
         variant.PreOrderQuantity = request.PreOrderQuantity;
+        variant.VariantSku = request.VariantSku;
+        variant.BaseCurve = request.BaseCurve;
+        variant.Diameter = request.Diameter;
+        variant.RefractiveIndex = request.RefractiveIndex;
+        variant.ExpectedDateRestock = request.ExpectedDateRestock;
         variant.Status = request.Status;
         variant.UpdatedAt = DateTime.UtcNow;
 
@@ -205,5 +247,40 @@ public class ProductManagerController : ControllerBase
 
 public record CreateProductRequest(string ProductName, string Sku, string? Description, string ProductType, decimal? BasePrice, long? CategoryId, long? BrandId);
 public record UpdateProductRequest(string? ProductName, string? Sku, string? Description, string? ProductType, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications, short Status);
-public record AddVariantRequest(string? Color, decimal Price, int StockQuantity, int PreOrderQuantity);
-public record UpdateVariantRequest(string? Color, decimal Price, int StockQuantity, int PreOrderQuantity, short Status);
+public record AddVariantRequest(
+    string? Color,
+    decimal Price,
+    int StockQuantity,
+    int PreOrderQuantity,
+    string VariantSku,
+    decimal? BaseCurve,
+    decimal? Diameter,
+    decimal? RefractiveIndex,
+    DateTime? ExpectedDateRestock
+);
+public record UpdateVariantRequest(
+    string? Color,
+    decimal Price,
+    int StockQuantity,
+    int PreOrderQuantity,
+    string VariantSku,
+    decimal? BaseCurve,
+    decimal? Diameter,
+    decimal? RefractiveIndex,
+    DateTime? ExpectedDateRestock,
+    short Status
+);
+public record VariantResponse(
+    long VariantId,
+    long ProductId,
+    string? Color,
+    decimal Price,
+    int StockQuantity,
+    int PreOrderQuantity,
+    string VariantSku,
+    decimal? BaseCurve,
+    decimal? Diameter,
+    decimal? RefractiveIndex,
+    DateTime? ExpectedDateRestock,
+    short Status
+);
