@@ -1,26 +1,20 @@
 using System.Security.Cryptography;
-using eyewearshop_data;
 using eyewearshop_data.Entities;
+using eyewearshop_data.Interfaces;
+using eyewearshop_service.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace eyewearshop_service.Auth;
 
-public interface IRefreshTokenService
-{
-    Task<RefreshToken> IssueAsync(long userId, CancellationToken ct = default);
-    Task<(RefreshToken? newToken, string? error)> RotateAsync(string refreshToken, CancellationToken ct = default);
-    Task<bool> RevokeAsync(string refreshToken, CancellationToken ct = default);
-}
-
 public class RefreshTokenService : IRefreshTokenService
 {
-    private readonly EyewearShopDbContext _db;
+    private readonly IRepository<RefreshToken> _refreshTokenRepository;
     private readonly JwtSettings _settings;
 
-    public RefreshTokenService(EyewearShopDbContext db, IOptions<JwtSettings> options)
+    public RefreshTokenService(IRepository<RefreshToken> refreshTokenRepository, IOptions<JwtSettings> options)
     {
-        _db = db;
+        _refreshTokenRepository = refreshTokenRepository;
         _settings = options.Value;
     }
 
@@ -36,8 +30,8 @@ public class RefreshTokenService : IRefreshTokenService
             ExpiresAt = now.AddDays(_settings.RefreshTokenExpirationDays)
         };
 
-        _db.RefreshTokens.Add(rt);
-        await _db.SaveChangesAsync(ct);
+        await _refreshTokenRepository.AddAsync(rt, ct);
+        await _refreshTokenRepository.SaveChangesAsync(ct);
         return rt;
     }
 
@@ -45,7 +39,8 @@ public class RefreshTokenService : IRefreshTokenService
     {
         if (string.IsNullOrWhiteSpace(refreshToken)) return (null, "Refresh token is required.");
 
-        var existing = await _db.RefreshTokens
+        var existing = await _refreshTokenRepository
+            .Query()
             .FirstOrDefaultAsync(x => x.Token == refreshToken, ct);
 
         if (existing == null) return (null, "Invalid refresh token.");
@@ -62,8 +57,8 @@ public class RefreshTokenService : IRefreshTokenService
             ExpiresAt = DateTime.UtcNow.AddDays(_settings.RefreshTokenExpirationDays)
         };
 
-        _db.RefreshTokens.Add(replacement);
-        await _db.SaveChangesAsync(ct);
+        await _refreshTokenRepository.AddAsync(replacement, ct);
+        await _refreshTokenRepository.SaveChangesAsync(ct);
 
         return (replacement, null);
     }
@@ -72,14 +67,15 @@ public class RefreshTokenService : IRefreshTokenService
     {
         if (string.IsNullOrWhiteSpace(refreshToken)) return false;
 
-        var existing = await _db.RefreshTokens
+        var existing = await _refreshTokenRepository
+            .Query()
             .FirstOrDefaultAsync(x => x.Token == refreshToken, ct);
 
         if (existing == null) return false;
         if (existing.RevokedAt != null) return true;
 
         existing.RevokedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        await _refreshTokenRepository.SaveChangesAsync(ct);
         return true;
     }
 

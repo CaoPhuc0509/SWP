@@ -1,8 +1,6 @@
-using eyewearshop_data;
-using eyewearshop_service.Cart;
+using eyewearshop_service.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace eyewearshop_api.Controllers;
 
@@ -11,12 +9,10 @@ namespace eyewearshop_api.Controllers;
 [Authorize]
 public class CartController : ControllerBase
 {
-    private readonly EyewearShopDbContext _db;
-    private readonly ISessionCartService _cartService;
+    private readonly ICartService _cartService;
 
-    public CartController(EyewearShopDbContext db, ISessionCartService cartService)
+    public CartController(ICartService cartService)
     {
-        _db = db;
         _cartService = cartService;
     }
 
@@ -29,75 +25,8 @@ public class CartController : ControllerBase
     [HttpGet]
     public async Task<ActionResult> GetMyCart(CancellationToken ct)
     {
-        var cartItems = _cartService.GetCart();
-        
-        if (cartItems.Count == 0)
-        {
-            return Ok(new
-            {
-                Items = Array.Empty<object>(),
-                Summary = new
-                {
-                    SubTotal = 0m,
-                    ItemCount = 0
-                }
-            });
-        }
-
-        var variantIds = cartItems.Select(ci => ci.VariantId).ToList();
-        
-        var variants = await _db.ProductVariants
-            .AsNoTracking()
-            .Where(v => variantIds.Contains(v.VariantId) && v.Status == 1)
-            .Include(v => v.Product)
-            .ThenInclude(p => p.Images.Where(i => i.Status == 1 && i.IsPrimary))
-            .Select(v => new
-            {
-                v.VariantId,
-                v.Color,
-                v.Price,
-                v.StockQuantity,
-                v.PreOrderQuantity,
-                Product = new
-                {
-                    v.Product.ProductId,
-                    v.Product.ProductName,
-                    v.Product.Sku,
-                    v.Product.ProductType,
-                    PrimaryImageUrl = v.Product.Images
-                        .Where(i => i.Status == 1)
-                        .OrderByDescending(i => i.IsPrimary)
-                        .ThenBy(i => i.SortOrder)
-                        .Select(i => i.Url)
-                        .FirstOrDefault()
-                }
-            })
-            .ToListAsync(ct);
-
-        var items = cartItems
-            .Join(variants, 
-                ci => ci.VariantId, 
-                v => v.VariantId, 
-                (ci, v) => new
-                {
-                    VariantId = ci.VariantId,
-                    Quantity = ci.Quantity,
-                    Variant = v,
-                    LineTotal = v.Price * ci.Quantity
-                })
-            .ToList();
-
-        var subTotal = items.Sum(x => x.LineTotal);
-
-        return Ok(new
-        {
-            Items = items,
-            Summary = new
-            {
-                SubTotal = subTotal,
-                ItemCount = items.Sum(x => x.Quantity)
-            }
-        });
+        var summary = await _cartService.GetCartSummaryAsync(ct);
+        return Ok(summary);
     }
 
     /// <summary>
@@ -106,21 +35,17 @@ public class CartController : ControllerBase
     [HttpPost("items")]
     public async Task<ActionResult> AddItem([FromBody] AddCartItemRequest request, CancellationToken ct)
     {
-        if (request.Quantity <= 0) return BadRequest("Quantity must be greater than 0.");
+        var (result, error, statusCode) = await _cartService.AddItemAsync(
+            request.VariantId,
+            request.Quantity,
+            ct);
 
-        var variant = await _db.ProductVariants
-            .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.VariantId == request.VariantId && v.Status == 1, ct);
+        if (error != null)
+        {
+            return StatusCode(statusCode ?? 400, error);
+        }
 
-        if (variant == null) return NotFound("Variant not found.");
-
-        _cartService.AddItem(request.VariantId, request.Quantity);
-
-        return Ok(new 
-        { 
-            VariantId = request.VariantId, 
-            Quantity = _cartService.GetCart().FirstOrDefault(x => x.VariantId == request.VariantId)?.Quantity ?? request.Quantity
-        });
+        return Ok(result);
     }
 
     /// <summary>
@@ -129,18 +54,17 @@ public class CartController : ControllerBase
     [HttpPut("items/{variantId:long}")]
     public async Task<ActionResult> UpdateItem([FromRoute] long variantId, [FromBody] UpdateCartItemRequest request, CancellationToken ct)
     {
-        if (request.Quantity <= 0) return BadRequest("Quantity must be greater than 0.");
+        var (result, error, statusCode) = await _cartService.UpdateItemAsync(
+            variantId,
+            request.Quantity,
+            ct);
 
-        var variant = await _db.ProductVariants
-            .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.VariantId == variantId && v.Status == 1, ct);
+        if (error != null)
+        {
+            return StatusCode(statusCode ?? 400, error);
+        }
 
-        if (variant == null) return NotFound("Variant not found.");
-
-        var updated = _cartService.UpdateItem(variantId, request.Quantity);
-        if (!updated) return NotFound("Item not found in cart.");
-
-        return Ok(new { VariantId = variantId, Quantity = request.Quantity });
+        return Ok(result);
     }
 
     /// <summary>
@@ -149,8 +73,11 @@ public class CartController : ControllerBase
     [HttpDelete("items/{variantId:long}")]
     public ActionResult RemoveItem([FromRoute] long variantId)
     {
-        var removed = _cartService.RemoveItem(variantId);
-        if (!removed) return NotFound("Item not found in cart.");
+        var (success, error, statusCode) = _cartService.RemoveItemAsync(variantId).GetAwaiter().GetResult();
+        if (!success)
+        {
+            return StatusCode(statusCode ?? 404, error);
+        }
 
         return NoContent();
     }

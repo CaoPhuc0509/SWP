@@ -68,7 +68,14 @@ public class CheckoutController : ControllerBase
             .Include(v => v.Product)
             .ToListAsync(ct);
 
-        var requiresPrescription = CartContainsFrameAndRxLens(variants.Select(v => v.Product.ProductType));
+        // Filter out variants with null Product or null ProductType, and get distinct product types
+        var productTypes = variants
+            .Where(v => v.Product != null && !string.IsNullOrEmpty(v.Product.ProductType))
+            .Select(v => v.Product!.ProductType)
+            .Distinct()
+            .ToList();
+
+        var requiresPrescription = CartContainsFrameAndRxLens(productTypes);
 
         return Ok(new
         {

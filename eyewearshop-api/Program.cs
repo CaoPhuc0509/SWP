@@ -1,13 +1,21 @@
 using System.Text;
 using System.Reflection;
 using eyewearshop_data;
+using eyewearshop_data.Interfaces;
+using eyewearshop_data.Repositories;
 using eyewearshop_service;
 using eyewearshop_service.Auth;
+using eyewearshop_service.Cart;
+using eyewearshop_service.Catalog;
+using eyewearshop_service.Interfaces;
+using eyewearshop_service.Orders;
+using eyewearshop_service.Payments;
 using eyewearshop_service.Policy;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using eyewearshop_service.Return;
 
 namespace eyewearshop_api
 {
@@ -19,6 +27,18 @@ namespace eyewearshop_api
 
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
+
+            // Add CORS support for React frontend
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowReactApp", policy =>
+                {
+                    policy.WithOrigins("http://localhost:5173", "https://localhost:5173")
+                          .AllowAnyMethod()
+                          .AllowAnyHeader()
+                          .AllowCredentials(); // Required for session cookies
+                });
+            });
 
             // Add session support for shopping cart
             builder.Services.AddDistributedMemoryCache();
@@ -70,16 +90,36 @@ namespace eyewearshop_api
 
             builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
             builder.Services.Configure<VietQrSettings>(builder.Configuration.GetSection("VietQr"));
+            builder.Services.Configure<MomoSettings>(builder.Configuration.GetSection("Momo"));
+            builder.Services.Configure<VnPaySettings>(builder.Configuration.GetSection("VnPay"));
 
             builder.Services.AddDbContext<EyewearShopDbContext>(options =>
                 options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+            builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+
             builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
             builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
             builder.Services.AddScoped<eyewearshop_service.Cart.ISessionCartService, eyewearshop_service.Cart.SessionCartService>();
-            builder.Services.AddScoped<IPolicyManager, PolicyManager>();
+            builder.Services.AddScoped<ICartService, CartService>();
+            builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<IPolicyManager, PolicyService>();
+            builder.Services.AddScoped<ICatalogService, CatalogService>();
+            builder.Services.AddScoped<IOrderService, OrderService>();
+            builder.Services.AddScoped<IPaymentService, PaymentService>();
+            builder.Services.AddScoped<IReturnService, ReturnService>();
 
             builder.Services.AddHttpClient<eyewearshop_service.VietQr.IVietQrClient, eyewearshop_service.VietQr.VietQrClient>();
+
+            // MoMo needs HttpClient, VNPay does not.
+            builder.Services.AddHttpClient<eyewearshop_service.Payments.MomoPaymentGateway>();
+            builder.Services.AddScoped<eyewearshop_service.Payments.VnPayPaymentGateway>();
+
+            // Register multiple payment gateways; they will be injected as IEnumerable<IPaymentGateway>
+            builder.Services.AddScoped<eyewearshop_service.Payments.IPaymentGateway>(sp =>
+                sp.GetRequiredService<eyewearshop_service.Payments.MomoPaymentGateway>());
+            builder.Services.AddScoped<eyewearshop_service.Payments.IPaymentGateway>(sp =>
+                sp.GetRequiredService<eyewearshop_service.Payments.VnPayPaymentGateway>());
 
             var jwt = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>();
             if (jwt == null || string.IsNullOrWhiteSpace(jwt.Secret))
@@ -111,6 +151,9 @@ namespace eyewearshop_api
             }
 
             app.UseHttpsRedirection();
+
+            // Enable CORS before session and authentication
+            app.UseCors("AllowReactApp");
 
             app.UseSession();
 

@@ -28,6 +28,7 @@ public class Order
     public ShippingInfo? ShippingInfo { get; set; }
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public ICollection<PaymentTransaction> PaymentTransactions { get; set; } = new List<PaymentTransaction>();
     public ICollection<ReturnRequest> ReturnRequests { get; set; } = new List<ReturnRequest>();
     public ICollection<ReturnRequest> ExchangeOrders { get; set; } = new List<ReturnRequest>(); // Orders created from exchanges
 }
