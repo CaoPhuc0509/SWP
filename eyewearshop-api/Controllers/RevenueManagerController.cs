@@ -18,10 +18,13 @@ public class RevenueManagerController : ControllerBase
     }
 
     /// <summary>
-    /// Revenue by day
+    /// Revenue by day (include return orders, return items)
     /// </summary>
     [HttpGet("daily")]
-    public async Task<ActionResult> GetDailyRevenue([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, CancellationToken ct = default)
+    public async Task<ActionResult> GetDailyRevenue(
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        CancellationToken ct = default)
     {
         startDate ??= DateTime.UtcNow.AddDays(-30);
         endDate ??= DateTime.UtcNow;
@@ -29,13 +32,29 @@ public class RevenueManagerController : ControllerBase
         var data = await _db.Orders
             .AsNoTracking()
             .Where(o => o.CreatedAt >= startDate && o.CreatedAt <= endDate)
-            .GroupBy(o => o.CreatedAt.Date)
+            .Select(o => new
+            {
+                Date = o.CreatedAt.Date,
+                o.TotalAmount,
+                OrderId = o.OrderId
+            })
+            .GroupBy(x => x.Date)
             .Select(g => new
             {
                 Date = g.Key,
-                TotalRevenue = g.Sum(o => o.TotalAmount),
-                OrderCount = g.Count(),
-                AvgOrderValue = g.Average(o => o.TotalAmount)
+                TotalRevenue = g.Sum(x => x.TotalAmount),
+                TotalOrders = g.Count(),
+
+                ReturnedOrders = _db.ReturnRequests
+                    .Where(rr => g.Select(x => x.OrderId).Contains(rr.OrderId))
+                    .Select(rr => rr.OrderId)
+                    .Distinct()
+                    .Count(),
+
+                ReturnedItems = _db.ReturnRequestItems
+                    .Where(rri => g.Select(x => x.OrderId)
+                    .Contains(rri.ReturnRequest.OrderId))
+                    .Sum(rri => (int?)rri.Quantity) ?? 0
             })
             .OrderBy(x => x.Date)
             .ToListAsync(ct);
@@ -44,151 +63,195 @@ public class RevenueManagerController : ControllerBase
     }
 
     /// <summary>
-    /// Revenue by month - returns daily revenue for the specified month and year
+    /// Revenue by month (group by month)
     /// </summary>
     [HttpGet("monthly")]
-    public async Task<ActionResult> GetMonthlyRevenue([FromQuery] int? month, [FromQuery] int? year, CancellationToken ct = default)
+    public async Task<ActionResult> GetMonthlyRevenue(
+        [FromQuery] int? month,
+        CancellationToken ct = default)
     {
-        year ??= DateTime.UtcNow.Year;
+        month ??= DateTime.UtcNow.Month;
+
         var data = await _db.Orders
             .AsNoTracking()
-            .Where(o => o.CreatedAt.Year == year && o.CreatedAt.Month == month)
-            .GroupBy(o => o.CreatedAt.Date)
+            .Where(o => o.CreatedAt.Month == month)
+            .Select(o => new
+            {
+                Month = o.CreatedAt.Month,
+                o.TotalAmount,
+                OrderId = o.OrderId
+            })
+            .GroupBy(x => x.Month)
             .Select(g => new
             {
-                Date = g.Key,
-                Month = month,
-                Year = year,
-                TotalRevenue = g.Sum(o => o.TotalAmount),
-                OrderCount = g.Count(),
-                AvgOrderValue = g.Average(o => o.TotalAmount)
+                Month = g.Key,
+                TotalRevenue = g.Sum(x => x.TotalAmount),
+                TotalOrders = g.Count(),
+
+                ReturnedOrders = _db.ReturnRequests
+                    .Where(rr => g.Select(x => x.OrderId).Contains(rr.OrderId))
+                    .Select(rr => rr.OrderId)
+                    .Distinct()
+                    .Count(),
+
+                ReturnedItems = _db.ReturnRequestItems
+                    .Where(rri => g.Select(x => x.OrderId)
+                    .Contains(rri.ReturnRequest.OrderId))
+                    .Sum(rri => (int?)rri.Quantity) ?? 0
             })
-            .OrderBy(x => x.Date)
+            .OrderBy(x => x.Month)
             .ToListAsync(ct);
 
         return Ok(data);
     }
 
-    /// <summary>
-    /// revenue by payment method
-    /// </summary>
-    [HttpGet("by-payment-method")]
-    public async Task<ActionResult> GetRevenueByPaymentMethod([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, CancellationToken ct = default)
+    [HttpGet("yearly")]
+    public async Task<ActionResult> GetYearRevenue(
+    [FromQuery] DateTime? startYear,
+    [FromQuery] DateTime? endYear,
+    CancellationToken ct = default)
     {
-        startDate ??= DateTime.UtcNow.AddDays(-30);
-        endDate ??= DateTime.UtcNow;
+        startYear ??= DateTime.UtcNow.AddYears(-5);
+        endYear ??= DateTime.UtcNow;
 
-        var data = await _db.Payments
+        var ordersQuery = _db.Orders
             .AsNoTracking()
-            .Where(p => p.CreatedAt >= startDate && p.CreatedAt <= endDate && p.Status == 1)
-            .GroupBy(p => p.PaymentMethod)
+            .Where(o => o.CreatedAt >= startYear && o.CreatedAt <= endYear);
+
+        var yearlyOrders = await ordersQuery
+            .GroupBy(o => o.CreatedAt.Year)
             .Select(g => new
             {
-                PaymentMethod = g.Key,
-                TotalAmount = g.Sum(p => p.Amount),
-                TransactionCount = g.Count(),
-                AvgTransaction = g.Average(p => p.Amount)
+                Year = g.Key,
+                TotalRevenue = g.Sum(x => x.TotalAmount),
+                TotalOrders = g.Count()
             })
             .ToListAsync(ct);
 
-        return Ok(data);
+        var yearlyReturnedOrders = await _db.ReturnRequests
+            .AsNoTracking()
+            .Where(rr => rr.Order.CreatedAt >= startYear &&
+                         rr.Order.CreatedAt <= endYear)
+            .GroupBy(rr => rr.Order.CreatedAt.Year)
+            .Select(g => new
+            {
+                Year = g.Key,
+                ReturnedOrders = g.Select(x => x.OrderId)
+                                  .Distinct()
+                                  .Count()
+            })
+            .ToListAsync(ct);
+
+        var yearlyReturnedItems = await _db.ReturnRequestItems
+            .AsNoTracking()
+            .Where(rri => rri.ReturnRequest.Order.CreatedAt >= startYear &&
+                          rri.ReturnRequest.Order.CreatedAt <= endYear)
+            .GroupBy(rri => rri.ReturnRequest.Order.CreatedAt.Year)
+            .Select(g => new
+            {
+                Year = g.Key,
+                ReturnedItems = g.Sum(x => x.Quantity)
+            })
+            .ToListAsync(ct);
+
+        var result = yearlyOrders
+            .Select(y => new
+            {
+                Year = y.Year,
+                y.TotalRevenue,
+                y.TotalOrders,
+                ReturnedOrders = yearlyReturnedOrders
+                    .FirstOrDefault(r => r.Year == y.Year)?.ReturnedOrders ?? 0,
+                ReturnedItems = yearlyReturnedItems
+                    .FirstOrDefault(r => r.Year == y.Year)?.ReturnedItems ?? 0,
+                ReturnRate = y.TotalOrders > 0
+                    ? (double)(
+                        yearlyReturnedOrders
+                            .FirstOrDefault(r => r.Year == y.Year)?.ReturnedOrders ?? 0
+                      ) / y.TotalOrders * 100
+                    : 0
+            })
+            .OrderBy(x => x.Year)
+            .ToList();
+
+        return Ok(result);
     }
 
+
     /// <summary>
-    /// Top products by revenue
+    /// Top products by revenue (by month)
     /// </summary>
     [HttpGet("top-products")]
-    public async Task<ActionResult> GetTopProducts([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] int limit, CancellationToken ct = default)
+    public async Task<ActionResult> GetTopProducts(
+        [FromQuery] DateTime? month,
+        [FromQuery] int? limit,
+        CancellationToken ct = default)
     {
-        startDate ??= DateTime.UtcNow.AddDays(-30);
-        endDate ??= DateTime.UtcNow;
+        var targetMonth = month ?? DateTime.UtcNow;
+        var top = limit ?? 10;
 
         var data = await _db.OrderItems
             .AsNoTracking()
-            .Include(oi => oi.Order)
-            .Where(oi => oi.Order.CreatedAt >= startDate && oi.Order.CreatedAt <= endDate)
+            .Where(oi =>
+                oi.Order.Status == 2 &&          // completed orders
+                oi.Status == 1 &&                // active item
+                oi.Order.CreatedAt.Year == targetMonth.Year &&
+                oi.Order.CreatedAt.Month == targetMonth.Month)
             .GroupBy(oi => oi.VariantId)
             .Select(g => new
             {
                 VariantId = g.Key,
-                QuantitySold = g.Sum(oi => oi.Quantity),
-                TotalRevenue = g.Sum(oi => oi.UnitPrice * oi.Quantity),
-                AvgPrice = g.Average(oi => oi.UnitPrice)
+                QuantitySold = g.Sum(x => x.Quantity),
+                TotalRevenue = g.Sum(x => x.UnitPrice * x.Quantity),
+                AvgPrice = g.Average(x => x.UnitPrice)
             })
             .OrderByDescending(x => x.TotalRevenue)
-            .Take(limit)
+            .Take(top)
             .ToListAsync(ct);
 
         return Ok(data);
     }
 
-    /// <summary>
-    /// Return rate
-    /// </summary>
-    [HttpGet("return-rate")]
-    public async Task<ActionResult> GetReturnRate([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, CancellationToken ct = default)
-    {
-        startDate ??= DateTime.UtcNow.AddDays(-30);
-        endDate ??= DateTime.UtcNow;
 
-        var totalOrders = await _db.Orders
-            .AsNoTracking()
-            .Where(o => o.CreatedAt >= startDate && o.CreatedAt <= endDate)
-            .CountAsync(ct);
-
-        var returnedOrders = await _db.ReturnRequests
-            .AsNoTracking()
-            .Include(rr => rr.Order)
-            .Where(rr => rr.Order.CreatedAt >= startDate && rr.Order.CreatedAt <= endDate)
-            .Select(rr => rr.OrderId)
-            .Distinct()
-            .CountAsync(ct);
-
-        var returnAmount = await _db.ReturnRequests
-            .AsNoTracking()
-            .Include(rr => rr.Order)
-            .Where(rr => rr.Order.CreatedAt >= startDate && rr.Order.CreatedAt <= endDate)
-            .SumAsync(rr => rr.Order.TotalAmount, ct);
-
-        return Ok(new
-        {
-            TotalOrders = totalOrders,
-            ReturnedOrders = returnedOrders,
-            ReturnRate = totalOrders > 0 ? (double)returnedOrders / totalOrders * 100 : 0,
-            ReturnAmount = returnAmount
-        });
-    }
 
     /// <summary>
     /// Revenue summary
     /// </summary>
     [HttpGet("summary")]
-    public async Task<ActionResult> GetRevenueSummary([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, CancellationToken ct = default)
+    public async Task<ActionResult> GetRevenueSummary(
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        CancellationToken ct = default)
     {
         startDate ??= DateTime.UtcNow.AddDays(-30);
         endDate ??= DateTime.UtcNow;
 
-        var totalRevenue = await _db.Orders
+        var ordersQuery = _db.Orders
             .AsNoTracking()
-            .Where(o => o.CreatedAt >= startDate && o.CreatedAt <= endDate)
-            .SumAsync(o => o.TotalAmount, ct);
+            .Where(o => o.CreatedAt >= startDate &&
+                        o.CreatedAt <= endDate &&
+                        o.Status == 2); // chỉ tính order completed
 
-        var totalOrders = await _db.Orders
-            .AsNoTracking()
-            .Where(o => o.CreatedAt >= startDate && o.CreatedAt <= endDate)
+        var totalRevenue = await ordersQuery
+            .SumAsync(o => (decimal?)o.TotalAmount, ct) ?? 0;
+
+        var totalOrders = await ordersQuery
             .CountAsync(ct);
 
-        var successfulPayments = await _db.Payments
+        var returnedOrdersQuery = _db.ReturnRequests
             .AsNoTracking()
-            .Where(p => p.CreatedAt >= startDate && p.CreatedAt <= endDate && p.Status == 1)
-            .CountAsync(ct);
+            .Where(rr => rr.Order.CreatedAt >= startDate &&
+                         rr.Order.CreatedAt <= endDate);
 
-        var uniqueCustomers = await _db.Orders
-            .AsNoTracking()
-            .Where(o => o.CreatedAt >= startDate && o.CreatedAt <= endDate)
-            .Select(o => o.CustomerId)
+        var returnedOrders = await returnedOrdersQuery
+            .Select(rr => rr.OrderId)
             .Distinct()
             .CountAsync(ct);
+
+        var returnedRevenue = await returnedOrdersQuery
+            .SumAsync(rr => (decimal?)rr.Order.TotalAmount, ct) ?? 0;
+
+        var netRevenue = totalRevenue - returnedRevenue;
 
         return Ok(new
         {
@@ -196,9 +259,12 @@ public class RevenueManagerController : ControllerBase
             EndDate = endDate,
             TotalRevenue = totalRevenue,
             TotalOrders = totalOrders,
-            AvgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0,
-            SuccessfulPayments = successfulPayments,
-            UniqueCustomers = uniqueCustomers
+            ReturnedOrders = returnedOrders,
+            ReturnedRevenue = returnedRevenue,
+            NetRevenue = netRevenue,
+            ReturnRate = totalOrders > 0
+                ? (double)returnedOrders / totalOrders * 100
+                : 0
         });
     }
 }
