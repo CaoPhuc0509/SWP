@@ -1,12 +1,16 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Primitives;
 using eyewearshop_data;
 using eyewearshop_data.Entities;
 using eyewearshop_data.Interfaces;
 using eyewearshop_service.Interfaces;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
+using VNPAY;
+using VNPAY.Models.Exceptions;
 
 namespace eyewearshop_service.Payments;
 
@@ -18,6 +22,7 @@ public class PaymentService : IPaymentService
     private readonly IReadOnlyDictionary<string, IPaymentGateway> _gatewaysByName;
     private readonly MomoSettings _momoSettings;
     private readonly VnPaySettings _vnPaySettings;
+    private readonly IVnpayClient _vnpayClient;
 
     public PaymentService(
         IRepository<Order> orderRepository,
@@ -25,7 +30,8 @@ public class PaymentService : IPaymentService
         IRepository<PaymentTransaction> paymentTransactionRepository,
         IEnumerable<IPaymentGateway> gateways,
         IOptions<MomoSettings> momoOptions,
-        IOptions<VnPaySettings> vnPayOptions)
+        IOptions<VnPaySettings> vnPayOptions,
+        IVnpayClient vnpayClient)
     {
         _orderRepository = orderRepository;
         _paymentRepository = paymentRepository;
@@ -33,6 +39,7 @@ public class PaymentService : IPaymentService
         _momoSettings = momoOptions.Value;
         _vnPaySettings = vnPayOptions.Value;
         _gatewaysByName = gateways.ToDictionary(g => g.Name, StringComparer.OrdinalIgnoreCase);
+        _vnpayClient = vnpayClient;
     }
 
     public async Task<IReadOnlyList<object>> GetOrderPaymentsAsync(long customerId, long orderId, CancellationToken ct = default)
@@ -373,34 +380,28 @@ public class PaymentService : IPaymentService
             return (false, "VNPay settings not configured.");
         }
 
-        if (!queryParams.TryGetValue("vnp_SecureHash", out var receivedHash) ||
-            !queryParams.TryGetValue("vnp_TxnRef", out var txnRef) ||
-            !queryParams.TryGetValue("vnp_ResponseCode", out var responseCode) ||
-            !queryParams.TryGetValue("vnp_TransactionStatus", out var transactionStatus) ||
-            !queryParams.TryGetValue("vnp_Amount", out var amountStr))
+        // Let the official VNPAY.NET client validate the signature and response codes.
+        VNPAY.Models.VnpayPaymentResult paymentResult;
+        try
         {
-            return (false, "Missing required VNPay parameters.");
+            var dict = queryParams.ToDictionary(
+                kvp => kvp.Key,
+                kvp => new StringValues(kvp.Value));
+
+            // Build a minimal IQueryCollection implementation compatible with VNPAY.NET
+            IQueryCollection queryCollection = new QueryCollectionWrapper(dict);
+            paymentResult = _vnpayClient.GetPaymentResult(queryCollection);
+        }
+        catch (VnpayException ex)
+        {
+            return (false, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Failed to verify VNPay response: {ex.Message}");
         }
 
-        // Rebuild data for hash: all vnp_* params except vnp_SecureHash and vnp_SecureHashType, sorted by key
-        var toHash = new SortedDictionary<string, string>();
-        foreach (var kvp in queryParams)
-        {
-            if (!kvp.Key.StartsWith("vnp_", StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (kvp.Key.Equals("vnp_SecureHash", StringComparison.OrdinalIgnoreCase) ||
-                kvp.Key.Equals("vnp_SecureHashType", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            toHash[kvp.Key] = kvp.Value;
-        }
-
-        var rawData = string.Join("&", toHash.Select(kvp => $"{kvp.Key}={kvp.Value}"));
-        var calculatedHash = HmacSha512(_vnPaySettings.HashSecret, rawData);
-        if (!string.Equals(calculatedHash, receivedHash, StringComparison.OrdinalIgnoreCase))
-        {
-            return (false, "Invalid VNPay signature.");
-        }
+        var txnRef = paymentResult.PaymentId.ToString();
 
         var tx = await _paymentTransactionRepository
             .Query()
@@ -417,57 +418,54 @@ public class PaymentService : IPaymentService
             return (true, "Already processed.");
         }
 
-        var now = DateTime.UtcNow;
-        queryParams.TryGetValue("vnp_TransactionNo", out var gatewayTransNo);
-        tx.GatewayTransactionId = gatewayTransNo;
+        // VNPay returns a DateTime without Kind; normalize to UTC for PostgreSQL timestamptz
+        var rawTimestamp = paymentResult.Timestamp;
+        var now = rawTimestamp.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(rawTimestamp, DateTimeKind.Utc)
+            : rawTimestamp.ToUniversalTime();
+        tx.GatewayTransactionId = paymentResult.VnpayTransactionId.ToString();
         tx.UpdatedAt = now;
         tx.RawResponse = JsonSerializer.Serialize(queryParams);
 
-        var isSuccess = responseCode == "00" && transactionStatus == "00";
-        if (isSuccess)
+        tx.Status = 1;
+        tx.PaidAt = now;
+
+        // Update order payment state (checkout creates AwaitingPayment + Unpaid; after successful payment -> Pending + Paid)
+        var paidOrder = tx.Order ?? await _orderRepository
+            .Query()
+            .FirstAsync(o => o.OrderId == tx.OrderId, ct);
+
+        if (paidOrder.Status == OrderStatuses.AwaitingPayment && paidOrder.PaymentStatus == PaymentStatuses.Unpaid)
         {
-            tx.Status = 1;
-            tx.PaidAt = now;
-
-            // VNPay amount is multiplied by 100
-            if (long.TryParse(amountStr, out var vnpAmount))
-            {
-                tx.Amount = vnpAmount / 100m;
-            }
-
-            var existingPayment = await _paymentRepository
-                .Query()
-                .FirstOrDefaultAsync(p =>
-                    p.OrderId == tx.OrderId &&
-                    p.PaymentType == "E_WALLET" &&
-                    p.PaymentMethod == "VNPAY" &&
-                    p.Amount == tx.Amount, ct);
-
-            if (existingPayment == null)
-            {
-                var order = tx.Order ?? await _orderRepository
-                    .Query()
-                    .FirstAsync(o => o.OrderId == tx.OrderId, ct);
-
-                var payment = new Payment
-                {
-                    OrderId = tx.OrderId,
-                    CustomerId = order.CustomerId,
-                    PaymentType = "E_WALLET",
-                    PaymentMethod = "VNPAY",
-                    Amount = tx.Amount,
-                    Note = $"VNPay transNo={gatewayTransNo}",
-                    Status = 1,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-
-                await _paymentRepository.AddAsync(payment, ct);
-            }
+            paidOrder.Status = OrderStatuses.Pending;
+            paidOrder.PaymentStatus = PaymentStatuses.Paid;
+            paidOrder.UpdatedAt = now;
         }
-        else
+
+        var existingPayment = await _paymentRepository
+            .Query()
+            .FirstOrDefaultAsync(p =>
+                p.OrderId == tx.OrderId &&
+                p.PaymentType == "E_WALLET" &&
+                p.PaymentMethod == "VNPAY" &&
+                p.Amount == tx.Amount, ct);
+
+        if (existingPayment == null)
         {
-            tx.Status = 2;
+            var payment = new Payment
+            {
+                OrderId = tx.OrderId,
+                CustomerId = paidOrder.CustomerId,
+                PaymentType = "E_WALLET",
+                PaymentMethod = "VNPAY",
+                Amount = tx.Amount,
+                Note = $"VNPay transNo={paymentResult.VnpayTransactionId}",
+                Status = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            await _paymentRepository.AddAsync(payment, ct);
         }
 
         await _paymentTransactionRepository.SaveChangesAsync(ct);
@@ -536,19 +534,29 @@ public class PaymentService : IPaymentService
         return sb.ToString();
     }
 
-    private static string HmacSha512(string key, string data)
+    // Minimal IQueryCollection wrapper to adapt a string dictionary for VNPAY.NET
+    private sealed class QueryCollectionWrapper : IQueryCollection
     {
-        var keyBytes = Encoding.UTF8.GetBytes(key);
-        var dataBytes = Encoding.UTF8.GetBytes(data);
+        private readonly Dictionary<string, StringValues> _store;
 
-        using var hmac = new HMACSHA512(keyBytes);
-        var hash = hmac.ComputeHash(dataBytes);
-        var sb = new StringBuilder(hash.Length * 2);
-        foreach (var b in hash)
+        public QueryCollectionWrapper(IDictionary<string, StringValues> source)
         {
-            sb.Append(b.ToString("x2"));
+            _store = new Dictionary<string, StringValues>(source, StringComparer.OrdinalIgnoreCase);
         }
-        return sb.ToString();
+
+        public int Count => _store.Count;
+
+        public ICollection<string> Keys => _store.Keys;
+
+        public bool ContainsKey(string key) => _store.ContainsKey(key);
+
+        public IEnumerator<KeyValuePair<string, StringValues>> GetEnumerator() => _store.GetEnumerator();
+
+        public bool TryGetValue(string key, out StringValues value) => _store.TryGetValue(key, out value);
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => _store.GetEnumerator();
+
+        public StringValues this[string key] => _store.TryGetValue(key, out var value) ? value : StringValues.Empty;
     }
 }
 

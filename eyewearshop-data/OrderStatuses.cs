@@ -12,6 +12,10 @@ public static class OrderStatuses
     public const short Cancelled = 6; // Order cancelled
     public const short Completed = 7; // Order completed (after delivery and no issues)
 
+    
+    public const short AwaitingPayment = 8; // Customer checkout order from cart, waiting for payment
+    public const short Deleted = 9; // Order deleted after a period of time unpaid, or deleted by customer before payment
+
     // Return request statuses
     public const short ReturnRequested = 10; // Customer submitted return request
     public const short ReturnApproved = 11; // Staff approved return
