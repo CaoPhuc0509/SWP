@@ -69,14 +69,14 @@ public class OrderController : ControllerBase
     }
 
     [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
-    [HttpPut("{id}/status")]
+    [HttpPut("{Orderid}/status")]
     public async Task<IActionResult> ChangeStatus(
-   long id,
+   long Orderid,
    [FromBody] ChangeOrderStatusRequest request)
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
 
-        await _orderService.ChangeStatusAsync(id, request.NewStatus, role);
+        await _orderService.ChangeStatusAsync(Orderid, request.NewStatus, role);
         return Ok("Order status updated successfully");
     }
 }
