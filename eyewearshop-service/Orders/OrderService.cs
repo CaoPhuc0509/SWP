@@ -204,6 +204,8 @@ public class OrderService : IOrderService
             return
                 (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
                 (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
+                (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
                 (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
                 (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
         }
