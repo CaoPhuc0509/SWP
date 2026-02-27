@@ -55,6 +55,9 @@ public class CheckoutController : ControllerBase
     [HttpGet("requirements")]
     public async Task<ActionResult> GetRequirements(CancellationToken ct)
     {
+        // Ensure session is loaded before accessing session-backed cart (important for some hosting setups)
+        await HttpContext.Session.LoadAsync(ct);
+
         var cartItems = _cartService.GetCart();
         
         if (cartItems.Count == 0)
@@ -246,7 +249,8 @@ public class CheckoutController : ControllerBase
             CustomerId = userId,
             OrderNumber = orderNumber,
             OrderType = orderType,
-            Status = OrderStatuses.Pending,
+            Status = OrderStatuses.AwaitingPayment,
+            PaymentStatus = PaymentStatuses.Unpaid,
             PromotionId = promotionId,
             SubTotal = subTotal,
             ShippingFee = shippingFee,

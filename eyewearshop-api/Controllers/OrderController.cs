@@ -79,4 +79,22 @@ public class OrderController : ControllerBase
         await _orderService.ChangeStatusAsync(Orderid, request.NewStatus, role);
         return Ok("Order status updated successfully");
     }
+
+    /// <summary>
+    /// Customer soft-delete an order that is awaiting payment and still unpaid.
+    /// This sets OrderStatus=Deleted (9) but does not remove the row.
+    /// </summary>
+    [HttpDelete("{orderId:long}")]
+    public async Task<ActionResult> DeleteAwaitingPaymentOrder([FromRoute] long orderId, CancellationToken ct)
+    {
+        var userId = GetUserIdOrThrow();
+
+        var (success, error, statusCode) = await _orderService.DeleteAwaitingPaymentOrderAsync(userId, orderId, ct);
+        if (!success)
+        {
+            return StatusCode(statusCode ?? 400, error);
+        }
+
+        return Ok(new { message = "Order deleted." });
+    }
 }

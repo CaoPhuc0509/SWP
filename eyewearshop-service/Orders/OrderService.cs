@@ -53,6 +53,7 @@ public class OrderService : IOrderService
                 o.OrderNumber,
                 o.OrderType,
                 o.Status,
+                o.PaymentStatus,
                 o.SubTotal,
                 o.ShippingFee,
                 o.DiscountAmount,
@@ -94,6 +95,7 @@ public class OrderService : IOrderService
                 o.OrderNumber,
                 o.OrderType,
                 o.Status,
+                o.PaymentStatus,
                 o.SubTotal,
                 o.ShippingFee,
                 o.DiscountAmount,
@@ -167,22 +169,45 @@ public class OrderService : IOrderService
 
         return order;
     }
+    public async Task<(bool success, string? error, int? statusCode)> DeleteAwaitingPaymentOrderAsync(
+        long customerId,
+        long orderId,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepository
+            .Query()
+            .FirstOrDefaultAsync(o => o.OrderId == orderId && o.CustomerId == customerId, ct);
+
+        if (order == null) return (false, "Order not found.", 404);
+
+        if (order.Status != OrderStatuses.AwaitingPayment || order.PaymentStatus != PaymentStatuses.Unpaid)
+        {
+            return (false, "Only unpaid orders awaiting payment can be deleted.", 400);
+        }
+
+        order.Status = OrderStatuses.Deleted;
+        order.UpdatedAt = DateTime.UtcNow;
+
+        await _orderRepository.SaveChangesAsync(ct);
+        return (true, null, 200);
+    }
+
     public async Task ChangeStatusAsync(long orderId, short newStatus, string role)
-{
-    var order = await _orderRepository
-        .Query()
-        .FirstOrDefaultAsync(o => o.OrderId == orderId);
+    {
+        var order = await _orderRepository
+            .Query()
+            .FirstOrDefaultAsync(o => o.OrderId == orderId);
 
-    if (order == null)
-        throw new Exception("Order not found");
+        if (order == null)
+            throw new Exception("Order not found");
 
-    if (!IsValidTransition(order.Status, newStatus, role))
-        throw new Exception("You are not allowed to change this order status");
+        if (!IsValidTransition(order.Status, newStatus, role))
+            throw new Exception("You are not allowed to change this order status");
 
-    order.Status = newStatus;
+        order.Status = newStatus;
 
-    await _orderRepository.SaveChangesAsync();
-}
+        await _orderRepository.SaveChangesAsync();
+    }
 
     private bool IsValidTransition(short current, short next, string role)
     {
