@@ -104,6 +104,25 @@ public class ReturnRequestController : ControllerBase
     }
 
     /// <summary>
+    /// Get all return requests with pagination.
+    /// Only accessible by SalesSupport and Operations roles.
+    /// </summary>
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
+    [HttpGet("all")]
+    public async Task<ActionResult> GetAllReturnRequests(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _returnService.GetAllReturnRequestsAsync(
+            page,
+            pageSize,
+            ct);
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Get a single return request detail for the current user.
     /// </summary>
     [HttpGet("{returnRequestId:long}")]

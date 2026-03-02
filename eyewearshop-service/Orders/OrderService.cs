@@ -169,6 +169,71 @@ public class OrderService : IOrderService
 
         return order;
     }
+
+    public async Task<object> GetAllOrdersAsync(
+        string? orderType,
+        short? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 100 ? 20 : pageSize;
+
+        var query = _orderRepository
+            .Query()
+            .AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(orderType))
+        {
+            query = query.Where(o => o.OrderType == orderType.Trim().ToUpperInvariant());
+        }
+
+        if (status.HasValue)
+        {
+            query = query.Where(o => o.Status == status.Value);
+        }
+
+        var total = await query.CountAsync(ct);
+
+        var orders = await query
+            .OrderByDescending(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(o => new
+            {
+                o.OrderId,
+                o.OrderNumber,
+                o.OrderType,
+                o.Status,
+                o.PaymentStatus,
+                o.CustomerId,
+                o.SubTotal,
+                o.ShippingFee,
+                o.DiscountAmount,
+                o.TotalAmount,
+                o.CreatedAt,
+                o.UpdatedAt,
+                ItemCount = o.Items.Count,
+                ShippingInfo = o.ShippingInfo == null ? null : new
+                {
+                    o.ShippingInfo.TrackingNumber,
+                    o.ShippingInfo.Carrier,
+                    o.ShippingInfo.ShippedAt,
+                    o.ShippingInfo.DeliveredAt
+                }
+            })
+            .ToListAsync(ct);
+
+        return new
+        {
+            Page = page,
+            PageSize = pageSize,
+            Total = total,
+            Items = orders
+        };
+    }
+    
     public async Task<(bool success, string? error, int? statusCode)> DeleteAwaitingPaymentOrderAsync(
         long customerId,
         long orderId,
