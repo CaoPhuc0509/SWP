@@ -114,10 +114,17 @@ public class PaymentController : ControllerBase
     public async Task<ActionResult> VnPayReturn(CancellationToken ct)
     {
         var queryParams = Request.Query.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToString());
-        var (success, message) = await _paymentService.HandleVnPayReturnAsync(queryParams, ct);
+        var (success, message, orderId) = await _paymentService.HandleVnPayReturnAsync(queryParams, ct);
         if (!success)
         {
             return BadRequest(message);
+        }
+
+        // After successful processing, redirect browser to frontend result page with orderId
+        if (orderId.HasValue)
+        {
+            var target = $"http://localhost:5173/payment/vnpay/result?orderId={orderId.Value}";
+            return Redirect(target);
         }
 
         return Ok(new { message = "VNPay return processed" });

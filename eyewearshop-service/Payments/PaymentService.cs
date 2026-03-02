@@ -372,12 +372,12 @@ public class PaymentService : IPaymentService
         return (true, "OK");
     }
 
-    public async Task<(bool success, string message)> HandleVnPayReturnAsync(IDictionary<string, string> queryParams, CancellationToken ct = default)
+    public async Task<(bool success, string message, long? orderId)> HandleVnPayReturnAsync(IDictionary<string, string> queryParams, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_vnPaySettings.TmnCode) ||
             string.IsNullOrWhiteSpace(_vnPaySettings.HashSecret))
         {
-            return (false, "VNPay settings not configured.");
+            return (false, "VNPay settings not configured.", null);
         }
 
         // Let the official VNPAY.NET client validate the signature and response codes.
@@ -394,11 +394,11 @@ public class PaymentService : IPaymentService
         }
         catch (VnpayException ex)
         {
-            return (false, ex.Message);
+            return (false, ex.Message, null);
         }
         catch (Exception ex)
         {
-            return (false, $"Failed to verify VNPay response: {ex.Message}");
+            return (false, $"Failed to verify VNPay response: {ex.Message}", null);
         }
 
         var txnRef = paymentResult.PaymentId.ToString();
@@ -410,12 +410,12 @@ public class PaymentService : IPaymentService
 
         if (tx == null)
         {
-            return (false, "Payment transaction not found.");
+            return (false, "Payment transaction not found.", null);
         }
 
         if (tx.Status == 1)
         {
-            return (true, "Already processed.");
+            return (true, "Already processed.", tx.OrderId);
         }
 
         // VNPay returns a DateTime without Kind; normalize to UTC for PostgreSQL timestamptz
@@ -471,7 +471,7 @@ public class PaymentService : IPaymentService
         await _paymentTransactionRepository.SaveChangesAsync(ct);
         await _paymentRepository.SaveChangesAsync(ct);
 
-        return (true, "OK");
+        return (true, "OK", paidOrder.OrderId);
     }
 
     public async Task<object?> GetOrderPaymentStatusAsync(long customerId, long orderId, CancellationToken ct = default)
