@@ -85,6 +85,66 @@ namespace eyewearshop_service.Return
             };
         }
 
+        public async Task<object?> GetReturnRequestByIdForStaffAsync(
+            long returnRequestId,
+            CancellationToken ct = default)
+        {
+            var request = await _returnRepository
+                .Query()
+                .AsNoTracking()
+                .Where(rr => rr.ReturnRequestId == returnRequestId)
+                .Select(rr => new
+                {
+                    rr.ReturnRequestId,
+                    rr.RequestNumber,
+                    rr.RequestType,
+                    rr.Status,
+                    rr.Reason,
+                    rr.Description,
+                    rr.StaffNotes,
+                    rr.CustomerId,
+                    rr.CreatedAt,
+                    rr.UpdatedAt,
+                    Order = new
+                    {
+                        rr.Order.OrderId,
+                        rr.Order.OrderNumber,
+                        rr.Order.OrderType,
+                        rr.Order.TotalAmount
+                    },
+                    ExchangeOrder = rr.ExchangeOrder == null ? null : new
+                    {
+                        rr.ExchangeOrder.OrderId,
+                        rr.ExchangeOrder.OrderNumber
+                    },
+                    Items = rr.Items.Select(rri => new
+                    {
+                        rri.ReturnRequestItemId,
+                        rri.Quantity,
+                        OrderItem = new
+                        {
+                            rri.OrderItem.OrderItemId,
+                            rri.OrderItem.UnitPrice,
+                            rri.OrderItem.Quantity,
+                            Variant = rri.OrderItem.Variant == null ? null : new
+                            {
+                                rri.OrderItem.Variant.VariantId,
+                                rri.OrderItem.Variant.Color,
+                                Product = rri.OrderItem.Variant.Product == null ? null : new
+                                {
+                                    rri.OrderItem.Variant.Product.ProductId,
+                                    rri.OrderItem.Variant.Product.ProductName,
+                                    rri.OrderItem.Variant.Product.Sku
+                                }
+                            }
+                        }
+                    })
+                })
+                .FirstOrDefaultAsync(ct);
+
+            return request;
+        }
+        
         private bool IsValidTransition(short currentStatus, short newStatus, string role)
         {
             if (role != RoleNames.Admin)

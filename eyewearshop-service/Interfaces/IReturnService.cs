@@ -14,5 +14,9 @@ namespace eyewearshop_service.Interfaces
             int page,
             int pageSize,
             CancellationToken ct = default);
+        
+        Task<object?> GetReturnRequestByIdForStaffAsync(
+            long returnRequestId,
+            CancellationToken ct = default);
     }
 }

@@ -22,6 +22,10 @@ public interface IOrderService
         int pageSize,
         CancellationToken ct = default);
     
+    Task<object?> GetOrderByIdForStaffAsync(
+        long orderId,
+        CancellationToken ct = default);
+    
     Task ChangeStatusAsync(long orderId, short newStatus, string role);
 
     /// <summary>
