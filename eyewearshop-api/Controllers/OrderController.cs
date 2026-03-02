@@ -83,6 +83,20 @@ public class OrderController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Get order detail by ID for SalesSupport and Operations staff (no customer filtering).
+    /// </summary>
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
+    [HttpGet("staff-view/{orderId:long}")]
+    public async Task<ActionResult> GetOrderByIdForStaff([FromRoute] long orderId, CancellationToken ct)
+    {
+        var order = await _orderService.GetOrderByIdForStaffAsync(orderId, ct);
+
+        if (order == null) return NotFound();
+
+        return Ok(order);
+    }
+
     private long GetUserIdOrThrow()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

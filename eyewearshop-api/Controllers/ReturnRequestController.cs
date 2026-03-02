@@ -16,13 +16,10 @@ public class ReturnRequestController : ControllerBase
     private readonly EyewearShopDbContext _db;
     private readonly IReturnService _returnService;
 
-    public ReturnRequestController(IReturnService returnService)
-    {
-        _returnService = returnService;
-    }
-    public ReturnRequestController(EyewearShopDbContext db)
+    public ReturnRequestController(EyewearShopDbContext db, IReturnService returnService)
     {
         _db = db;
+        _returnService = returnService;
     }
 
     public record CreateReturnRequestRequest(
@@ -120,6 +117,20 @@ public class ReturnRequestController : ControllerBase
             ct);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Get return request detail by ID for SalesSupport and Operations staff (no customer filtering).
+    /// </summary>
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
+    [HttpGet("staff-view/{returnRequestId:long}")]
+    public async Task<ActionResult> GetReturnRequestByIdForStaff([FromRoute] long returnRequestId, CancellationToken ct)
+    {
+        var request = await _returnService.GetReturnRequestByIdForStaffAsync(returnRequestId, ct);
+
+        if (request == null) return NotFound();
+
+        return Ok(request);
     }
 
     /// <summary>
@@ -278,7 +289,9 @@ public class ReturnRequestController : ControllerBase
     [Authorize(Roles = RoleNames.Admin)]
     public async Task<IActionResult> ChangeStatus(long id, [FromBody] short newStatus)
     {
-        var role = User.FindFirst("role")?.Value;
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (string.IsNullOrEmpty(role))
+            return Unauthorized("User role not found.");
 
         await _returnService.ChangeReturnStatusAsync(id, newStatus, role);
 
