@@ -60,6 +60,29 @@ public class OrderController : ControllerBase
         return Ok(order);
     }
 
+    /// <summary>
+    /// Get all orders with optional filtering by order type/status and pagination.
+    /// Only accessible by SalesSupport and Operations roles.
+    /// </summary>
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
+    [HttpGet("all")]
+    public async Task<ActionResult> GetAllOrders(
+        [FromQuery] string? orderType,
+        [FromQuery] short? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _orderService.GetAllOrdersAsync(
+            orderType,
+            status,
+            page,
+            pageSize,
+            ct);
+
+        return Ok(result);
+    }
+
     private long GetUserIdOrThrow()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);

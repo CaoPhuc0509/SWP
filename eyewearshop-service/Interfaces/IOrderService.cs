@@ -14,6 +14,14 @@ public interface IOrderService
         long customerId,
         long orderId,
         CancellationToken ct = default);
+    
+    Task<object> GetAllOrdersAsync(
+        string? orderType,
+        short? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+    
     Task ChangeStatusAsync(long orderId, short newStatus, string role);
 
     /// <summary>
