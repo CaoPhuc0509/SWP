@@ -214,14 +214,68 @@ public class OrderService : IOrderService
                 o.TotalAmount,
                 o.CreatedAt,
                 o.UpdatedAt,
-                ItemCount = o.Items.Count,
+                Prescription = o.OrderPrescription == null ? null : new
+                {
+                    o.OrderPrescription.SavedPrescriptionId,
+                    o.OrderPrescription.RightSphere,
+                    o.OrderPrescription.RightCylinder,
+                    o.OrderPrescription.RightAxis,
+                    o.OrderPrescription.RightAdd,
+                    o.OrderPrescription.RightPD,
+                    o.OrderPrescription.LeftSphere,
+                    o.OrderPrescription.LeftCylinder,
+                    o.OrderPrescription.LeftAxis,
+                    o.OrderPrescription.LeftAdd,
+                    o.OrderPrescription.LeftPD,
+                    o.OrderPrescription.Notes,
+                    o.OrderPrescription.PrescribedBy,
+                    o.OrderPrescription.PrescriptionDate,
+                    o.OrderPrescription.CreatedAt
+                },
                 ShippingInfo = o.ShippingInfo == null ? null : new
                 {
+                    o.ShippingInfo.RecipientName,
+                    o.ShippingInfo.PhoneNumber,
+                    o.ShippingInfo.AddressLine,
+                    o.ShippingInfo.City,
+                    o.ShippingInfo.District,
+                    o.ShippingInfo.Ward,
+                    o.ShippingInfo.ShippingMethod,
                     o.ShippingInfo.TrackingNumber,
                     o.ShippingInfo.Carrier,
                     o.ShippingInfo.ShippedAt,
+                    o.ShippingInfo.EstimatedDeliveryDate,
                     o.ShippingInfo.DeliveredAt
-                }
+                },
+                Items = o.Items.Select(oi => new
+                {
+                    oi.OrderItemId,
+                    oi.UnitPrice,
+                    oi.Quantity,
+                    oi.SubTotal,
+                    oi.Description,
+                    Variant = oi.Variant == null ? null : new
+                    {
+                        oi.Variant.VariantId,
+                        oi.Variant.Color,
+                        Product = oi.Variant.Product == null ? null : new
+                        {
+                            oi.Variant.Product.ProductId,
+                            oi.Variant.Product.ProductName,
+                            oi.Variant.Product.Sku,
+                            oi.Variant.Product.ProductType
+                        }
+                    }
+                }),
+                Payments = o.Payments.Select(p => new
+                {
+                    p.PaymentId,
+                    p.PaymentType,
+                    p.PaymentMethod,
+                    p.Amount,
+                    p.Status,
+                    p.CreatedAt
+                })
             })
             .ToListAsync(ct);
 
