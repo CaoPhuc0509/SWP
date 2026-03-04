@@ -214,6 +214,16 @@ public class OrderService : IOrderService
                 o.TotalAmount,
                 o.CreatedAt,
                 o.UpdatedAt,
+                Customer = o.Customer == null ? null : new
+                {
+                    o.Customer.UserId,
+                    o.Customer.Email,
+                    o.Customer.FullName,
+                    o.Customer.PhoneNumber,
+                    o.Customer.Gender,
+                    o.Customer.DateOfBirth,
+                    o.Customer.Status
+                },
                 Prescription = o.OrderPrescription == null ? null : new
                 {
                     o.OrderPrescription.SavedPrescriptionId,
@@ -310,6 +320,16 @@ public class OrderService : IOrderService
                 o.TotalAmount,
                 o.CreatedAt,
                 o.UpdatedAt,
+                Customer = o.Customer == null ? null : new
+                {
+                    o.Customer.UserId,
+                    o.Customer.Email,
+                    o.Customer.FullName,
+                    o.Customer.PhoneNumber,
+                    o.Customer.Gender,
+                    o.Customer.DateOfBirth,
+                    o.Customer.Status
+                },
                 Prescription = o.OrderPrescription == null ? null : new
                 {
                     o.OrderPrescription.SavedPrescriptionId,
