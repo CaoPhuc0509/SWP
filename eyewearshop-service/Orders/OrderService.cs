@@ -472,15 +472,17 @@ public class OrderService : IOrderService
                     (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
             }
 
-            // PRE_ORDER orders: Check if items need processing (RX_LENS, CONTACT_LENS, COMBO)
+            // PRE_ORDER orders: Check if items need Produced 
             if (order.OrderType == OrderTypes.PreOrder)
             {
-                bool needsProcessing = order.Items.Any(oi => 
-                    oi.Variant?.Product?.ProductType == ProductTypes.RxLens ||
-                    oi.Variant?.Product?.ProductType == ProductTypes.ContactLens ||
-                    oi.Variant?.Product?.ProductType == ProductTypes.Combo);
+                bool needsProduced = 
+                    // Check if has Combo
+                    order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Combo) ||
+                    // Check if has both Frame AND RxLens
+                    (order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Frame) &&
+                     order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.RxLens));
 
-                if (needsProcessing)
+                if (needsProduced)
                 {
                     // PRE_ORDER with manufacturing: Confirmed → Produced → Shipped → Delivered → Completed
                     return
