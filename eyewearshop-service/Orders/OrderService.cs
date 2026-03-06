@@ -264,6 +264,7 @@ public class OrderService : IOrderService
                     oi.Quantity,
                     oi.SubTotal,
                     oi.Description,
+                    InStock = oi.Variant == null ? false : oi.Variant.StockQuantity > 0,
                     Variant = oi.Variant == null ? null : new
                     {
                         oi.Variant.VariantId,
@@ -370,6 +371,7 @@ public class OrderService : IOrderService
                     oi.Quantity,
                     oi.SubTotal,
                     oi.Description,
+                    InStock = oi.Variant == null ? false : oi.Variant.StockQuantity > 0,
                     Variant = oi.Variant == null ? null : new
                     {
                         oi.Variant.VariantId,
@@ -425,12 +427,15 @@ public class OrderService : IOrderService
     {
         var order = await _orderRepository
             .Query()
+            .Include(o => o.Items)
+            .ThenInclude(oi => oi.Variant!)
+            .ThenInclude(v => v.Product)
             .FirstOrDefaultAsync(o => o.OrderId == orderId);
 
         if (order == null)
             throw new Exception("Order not found");
 
-        if (!IsValidTransition(order.Status, newStatus, role))
+        if (!IsValidTransition(order.Status, newStatus, role, order))
             throw new Exception("You are not allowed to change this order status");
 
         order.Status = newStatus;
@@ -438,7 +443,7 @@ public class OrderService : IOrderService
         await _orderRepository.SaveChangesAsync();
     }
 
-    private bool IsValidTransition(short current, short next, string role)
+    private bool IsValidTransition(short current, short next, string role, Order order)
     {
         // SALES STAFF
         if (role == RoleNames.SalesSupport)
@@ -455,6 +460,51 @@ public class OrderService : IOrderService
         // OPERATION STAFF
         if (role == RoleNames.Operations)
         {
+            // PRESCRIPTION orders: Confirmed → Produced → Shipped → Delivered → Completed
+            if (order.OrderType == OrderTypes.Prescription)
+            {
+                return
+                    (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
+                    (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
+                    (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
+                    (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
+                    (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
+                    (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+            }
+
+            // PRE_ORDER orders: Check if items need processing (RX_LENS, CONTACT_LENS, COMBO)
+            if (order.OrderType == OrderTypes.PreOrder)
+            {
+                bool needsProcessing = order.Items.Any(oi => 
+                    oi.Variant?.Product?.ProductType == ProductTypes.RxLens ||
+                    oi.Variant?.Product?.ProductType == ProductTypes.ContactLens ||
+                    oi.Variant?.Product?.ProductType == ProductTypes.Combo);
+
+                if (needsProcessing)
+                {
+                    // PRE_ORDER with manufacturing: Confirmed → Produced → Shipped → Delivered → Completed
+                    return
+                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
+                        (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
+                        (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
+                        (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
+                        (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
+                        (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                }
+                else
+                {
+                    // PRE_ORDER without manufacturing: Confirmed → Processing → Shipped → Delivered → Completed
+                    return
+                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
+                        (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                        (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
+                        (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
+                        (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
+                        (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                }
+            }
+
+            // AVAILABLE orders: Confirmed → Processing → Shipped → Delivered → Completed
             return
                 (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
                 (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
