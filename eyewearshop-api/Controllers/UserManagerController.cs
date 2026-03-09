@@ -46,52 +46,33 @@ public class UserManagerController : ControllerBase
     }
 
     /// <summary>
-    /// Get staff list
+    /// get users by roleId
     /// </summary>
-    [HttpGet("staff")]
-    public async Task<ActionResult> GetStaff(CancellationToken ct = default)
+    [HttpGet("role/{roleId}")]
+    public async Task<ActionResult> GetUsersByRoleId(
+        [FromRoute] int roleId,
+        CancellationToken ct = default)
     {
-        var staff = await _db.Users
+        var users = await _db.Users
             .AsNoTracking()
-            .Include(u => u.Role)
-           .Where(u => u.Role.RoleId == 2 || u.Role.RoleId == 3)
+            .Where(u => u.RoleId == roleId)
             .Select(u => new
             {
                 u.UserId,
                 u.Email,
                 u.FullName,
                 u.PhoneNumber,
+                u.Gender,
+                u.DateOfBirth,
+                u.RoleId,
                 Role = u.Role.RoleName,
                 u.Status,
-                u.CreatedAt
+                u.CreatedAt,
+                u.UpdatedAt
             })
             .ToListAsync(ct);
 
-        return Ok(staff);
-    }
-
-    /// <summary>
-    /// Get customers list
-    /// </summary>
-    [HttpGet("customers")]
-    public async Task<ActionResult> GetCustomers(CancellationToken ct = default)
-    {
-        var customers = await _db.Users
-            .AsNoTracking()
-            .Include(u => u.Role)
-            .Where(u => u.Role.RoleId == 1)
-            .Select(u => new
-            {
-                u.UserId,
-                u.Email,
-                u.FullName,
-                u.PhoneNumber,
-                u.Status,
-                u.CreatedAt
-            })
-            .ToListAsync(ct);
-
-        return Ok(customers);
+        return Ok(users);
     }
 
     /// <summary>
@@ -108,7 +89,7 @@ public class UserManagerController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Password))
             return BadRequest("Password is required");
 
-        if (request.RoleId != 2 && request.RoleId != 3)
+        if (request.RoleId != 2 && request.RoleId != 3 && request.RoleId != 4)
             return BadRequest("Invalid staff role");
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();

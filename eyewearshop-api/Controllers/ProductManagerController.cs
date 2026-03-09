@@ -243,7 +243,34 @@ public class ProductManagerController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(variant);
     }
+    /// <summary>
+    /// soft delete product (set status = 0)
+    /// </summary>
+    [HttpPatch("{productId}/delete")]
+    public async Task<ActionResult> SoftDeleteProduct(
+        [FromRoute] long productId,
+        CancellationToken ct)
+    {
+        var product = await _db.Products
+            .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+
+        if (product == null)
+            return NotFound("Product not found");
+
+        product.Status = 0;
+        product.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new
+        {
+            Message = "Product deleted successfully",
+            product.ProductId,
+            product.Status
+        });
+    }
 }
+
 
 public record CreateProductRequest(string ProductName, string Sku, string? Description, string ProductType, decimal? BasePrice, long? CategoryId, long? BrandId);
 public record UpdateProductRequest(string? ProductName, string? Sku, string? Description, string? ProductType, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications, short Status);
