@@ -6,8 +6,8 @@ public static class OrderStatuses
     public const short Pending = 0; // Customer placed order, waiting for staff validation
     public const short Validated = 1; // Sales staff validated the order
     public const short Confirmed = 2; // Sales staff confirmed with customer
-    public const short Produced = 10; // Order produced (for prescription items, after production is complete)
-    public const short Processing = 3; // Transferred to operations, being processed
+    public const short Processed = 10; // Order produced (for prescription items, after production is complete)
+    public const short Produced = 3; // Transferred to operations, being processed
     public const short Shipped = 4; // Shipped to customer
     public const short Delivered = 5; // Delivered to customer
     public const short Cancelled = 6; // Order cancelled

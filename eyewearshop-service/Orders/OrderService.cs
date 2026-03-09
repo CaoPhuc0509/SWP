@@ -464,9 +464,9 @@ public class OrderService : IOrderService
             if (order.OrderType == OrderTypes.Prescription)
             {
                 return
-                    (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
-                    (current == OrderStatuses.Produced && next == OrderStatuses.Processing) ||
-                    (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                    (current == OrderStatuses.Confirmed && next == OrderStatuses.Processed) ||
+                    (current == OrderStatuses.Processed && next == OrderStatuses.Produced) ||
+                    (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                     (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                     (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
                     (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
@@ -487,9 +487,9 @@ public class OrderService : IOrderService
                 {
                     // PRE_ORDER with manufacturing: Confirmed → Produced → Processing → Shipped → Delivered → Completed
                     return
-                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
-                        (current == OrderStatuses.Produced && next == OrderStatuses.Processing) ||
-                        (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Processed) ||
+                        (current == OrderStatuses.Processed && next == OrderStatuses.Produced) ||
+                        (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                         (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                         (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
                         (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
@@ -499,8 +499,8 @@ public class OrderService : IOrderService
                 {
                     // PRE_ORDER without manufacturing: Confirmed → Processing → Shipped → Delivered → Completed
                     return
-                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
-                        (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
+                        (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                         (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                         (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
                         (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
@@ -510,8 +510,8 @@ public class OrderService : IOrderService
 
             // AVAILABLE orders: Confirmed → Processing → Shipped → Delivered → Completed
             return
-                (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
-                (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
+                (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                 (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                 (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
                 (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
