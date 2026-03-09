@@ -16,6 +16,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using eyewearshop_service.Return;
+using VNPAY.Extensions;
+using eyewearshop_api.Services;
 
 namespace eyewearshop_api
 {
@@ -33,7 +35,10 @@ namespace eyewearshop_api
             {
                 options.AddPolicy("AllowReactApp", policy =>
                 {
-                    policy.WithOrigins("http://localhost:5173", "https://localhost:5173")
+                    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ??
+                                         ["http://localhost:5173", "https://localhost:5173"];
+
+                    policy.WithOrigins(allowedOrigins)
                           .AllowAnyMethod()
                           .AllowAnyHeader()
                           .AllowCredentials(); // Required for session cookies
@@ -47,7 +52,19 @@ namespace eyewearshop_api
                 options.IdleTimeout = TimeSpan.FromMinutes(30);
                 options.Cookie.HttpOnly = true;
                 options.Cookie.IsEssential = true;
-                options.Cookie.SameSite = SameSiteMode.Lax;
+                // Session cart relies on cookies.
+                // For cross-origin frontend deployments, browsers require SameSite=None + Secure.
+                if (builder.Environment.IsDevelopment())
+                {
+                    // Local dev typically uses same-origin or proxy; keep it permissive and HTTP-friendly.
+                    options.Cookie.SameSite = SameSiteMode.Lax;
+                    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                }
+                else
+                {
+                    options.Cookie.SameSite = SameSiteMode.None;
+                    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                }
             });
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddSwaggerGen(c =>
@@ -92,6 +109,27 @@ namespace eyewearshop_api
             builder.Services.Configure<VietQrSettings>(builder.Configuration.GetSection("VietQr"));
             builder.Services.Configure<MomoSettings>(builder.Configuration.GetSection("Momo"));
             builder.Services.Configure<VnPaySettings>(builder.Configuration.GetSection("VnPay"));
+
+            // VNPAY.NET client configuration (uses the same VnPay section)
+            var vnpSection = builder.Configuration.GetSection("VnPay");
+            builder.Services.AddVnpayClient(config =>
+            {
+                config.TmnCode = vnpSection["TmnCode"]!;
+                config.HashSecret = vnpSection["HashSecret"]!;
+                config.CallbackUrl = vnpSection["ReturnUrl"]!;
+                if (!string.IsNullOrWhiteSpace(vnpSection["PaymentUrl"]))
+                {
+                    config.BaseUrl = vnpSection["PaymentUrl"]!;
+                }
+                if (!string.IsNullOrWhiteSpace(vnpSection["OrderType"]))
+                {
+                    config.OrderType = vnpSection["OrderType"]!;
+                }
+                if (!string.IsNullOrWhiteSpace(vnpSection["Version"]))
+                {
+                    config.Version = vnpSection["Version"]!;
+                }
+            });
 
             builder.Services.AddDbContext<EyewearShopDbContext>(options =>
                 options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -141,6 +179,9 @@ namespace eyewearshop_api
                 });
 
             builder.Services.AddAuthorization();
+
+            // Background job: expire unpaid awaiting-payment orders after 30 minutes (soft delete)
+            builder.Services.AddHostedService<OrderPaymentExpiryHostedService>();
 
             var app = builder.Build();
 

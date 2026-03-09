@@ -33,6 +33,6 @@ public interface IPaymentService
     /// <summary>
     /// Handle VNPay return URL (browser redirect) and update payment transaction/payment status.
     /// </summary>
-    Task<(bool success, string message)> HandleVnPayReturnAsync(IDictionary<string, string> queryParams, CancellationToken ct = default);
+    Task<(bool success, string message, long? orderId)> HandleVnPayReturnAsync(IDictionary<string, string> queryParams, CancellationToken ct = default);
 }
 

@@ -60,6 +60,43 @@ public class OrderController : ControllerBase
         return Ok(order);
     }
 
+    /// <summary>
+    /// Get all orders with optional filtering by order type/status and pagination.
+    /// Only accessible by SalesSupport and Operations roles.
+    /// </summary>
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
+    [HttpGet("all")]
+    public async Task<ActionResult> GetAllOrders(
+        [FromQuery] string? orderType,
+        [FromQuery] short? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _orderService.GetAllOrdersAsync(
+            orderType,
+            status,
+            page,
+            pageSize,
+            ct);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get order detail by ID for SalesSupport and Operations staff (no customer filtering).
+    /// </summary>
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
+    [HttpGet("staff-view/{orderId:long}")]
+    public async Task<ActionResult> GetOrderByIdForStaff([FromRoute] long orderId, CancellationToken ct)
+    {
+        var order = await _orderService.GetOrderByIdForStaffAsync(orderId, ct);
+
+        if (order == null) return NotFound();
+
+        return Ok(order);
+    }
+
     private long GetUserIdOrThrow()
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -69,14 +106,32 @@ public class OrderController : ControllerBase
     }
 
     [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
-    [HttpPut("{id}/status")]
+    [HttpPut("{Orderid}/status")]
     public async Task<IActionResult> ChangeStatus(
-   long id,
+   long Orderid,
    [FromBody] ChangeOrderStatusRequest request)
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
 
-        await _orderService.ChangeStatusAsync(id, request.NewStatus, role);
+        await _orderService.ChangeStatusAsync(Orderid, request.NewStatus, role);
         return Ok("Order status updated successfully");
+    }
+
+    /// <summary>
+    /// Customer soft-delete an order that is awaiting payment and still unpaid.
+    /// This sets OrderStatus=Deleted (9) but does not remove the row.
+    /// </summary>
+    [HttpDelete("{orderId:long}")]
+    public async Task<ActionResult> DeleteAwaitingPaymentOrder([FromRoute] long orderId, CancellationToken ct)
+    {
+        var userId = GetUserIdOrThrow();
+
+        var (success, error, statusCode) = await _orderService.DeleteAwaitingPaymentOrderAsync(userId, orderId, ct);
+        if (!success)
+        {
+            return StatusCode(statusCode ?? 400, error);
+        }
+
+        return Ok(new { message = "Order deleted." });
     }
 }

@@ -53,6 +53,7 @@ public class OrderService : IOrderService
                 o.OrderNumber,
                 o.OrderType,
                 o.Status,
+                o.PaymentStatus,
                 o.SubTotal,
                 o.ShippingFee,
                 o.DiscountAmount,
@@ -94,6 +95,7 @@ public class OrderService : IOrderService
                 o.OrderNumber,
                 o.OrderType,
                 o.Status,
+                o.PaymentStatus,
                 o.SubTotal,
                 o.ShippingFee,
                 o.DiscountAmount,
@@ -167,24 +169,281 @@ public class OrderService : IOrderService
 
         return order;
     }
+
+    public async Task<object> GetAllOrdersAsync(
+        string? orderType,
+        short? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 100 ? 20 : pageSize;
+
+        var query = _orderRepository
+            .Query()
+            .AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(orderType))
+        {
+            query = query.Where(o => o.OrderType == orderType.Trim().ToUpperInvariant());
+        }
+
+        if (status.HasValue)
+        {
+            query = query.Where(o => o.Status == status.Value);
+        }
+
+        var total = await query.CountAsync(ct);
+
+        var orders = await query
+            .OrderByDescending(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(o => new
+            {
+                o.OrderId,
+                o.OrderNumber,
+                o.OrderType,
+                o.Status,
+                o.PaymentStatus,
+                o.CustomerId,
+                o.SubTotal,
+                o.ShippingFee,
+                o.DiscountAmount,
+                o.TotalAmount,
+                o.CreatedAt,
+                o.UpdatedAt,
+                Customer = o.Customer == null ? null : new
+                {
+                    o.Customer.UserId,
+                    o.Customer.Email,
+                    o.Customer.FullName,
+                    o.Customer.PhoneNumber,
+                    o.Customer.Gender,
+                    o.Customer.DateOfBirth,
+                    o.Customer.Status
+                },
+                Prescription = o.OrderPrescription == null ? null : new
+                {
+                    o.OrderPrescription.SavedPrescriptionId,
+                    o.OrderPrescription.RightSphere,
+                    o.OrderPrescription.RightCylinder,
+                    o.OrderPrescription.RightAxis,
+                    o.OrderPrescription.RightAdd,
+                    o.OrderPrescription.RightPD,
+                    o.OrderPrescription.LeftSphere,
+                    o.OrderPrescription.LeftCylinder,
+                    o.OrderPrescription.LeftAxis,
+                    o.OrderPrescription.LeftAdd,
+                    o.OrderPrescription.LeftPD,
+                    o.OrderPrescription.Notes,
+                    o.OrderPrescription.PrescribedBy,
+                    o.OrderPrescription.PrescriptionDate,
+                    o.OrderPrescription.CreatedAt
+                },
+                ShippingInfo = o.ShippingInfo == null ? null : new
+                {
+                    o.ShippingInfo.RecipientName,
+                    o.ShippingInfo.PhoneNumber,
+                    o.ShippingInfo.AddressLine,
+                    o.ShippingInfo.City,
+                    o.ShippingInfo.District,
+                    o.ShippingInfo.Ward,
+                    o.ShippingInfo.ShippingMethod,
+                    o.ShippingInfo.TrackingNumber,
+                    o.ShippingInfo.Carrier,
+                    o.ShippingInfo.ShippedAt,
+                    o.ShippingInfo.EstimatedDeliveryDate,
+                    o.ShippingInfo.DeliveredAt
+                },
+                Items = o.Items.Select(oi => new
+                {
+                    oi.OrderItemId,
+                    oi.UnitPrice,
+                    oi.Quantity,
+                    oi.SubTotal,
+                    oi.Description,
+                    InStock = oi.Variant == null ? false : oi.Variant.StockQuantity > 0,
+                    Variant = oi.Variant == null ? null : new
+                    {
+                        oi.Variant.VariantId,
+                        oi.Variant.Color,
+                        Product = oi.Variant.Product == null ? null : new
+                        {
+                            oi.Variant.Product.ProductId,
+                            oi.Variant.Product.ProductName,
+                            oi.Variant.Product.Sku,
+                            oi.Variant.Product.ProductType
+                        }
+                    }
+                }),
+                Payments = o.Payments.Select(p => new
+                {
+                    p.PaymentId,
+                    p.PaymentType,
+                    p.PaymentMethod,
+                    p.Amount,
+                    p.Status,
+                    p.CreatedAt
+                })
+            })
+            .ToListAsync(ct);
+
+        return new
+        {
+            Page = page,
+            PageSize = pageSize,
+            Total = total,
+            Items = orders
+        };
+    }
+
+    public async Task<object?> GetOrderByIdForStaffAsync(
+        long orderId,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepository
+            .Query()
+            .AsNoTracking()
+            .Where(o => o.OrderId == orderId)
+            .Select(o => new
+            {
+                o.OrderId,
+                o.OrderNumber,
+                o.OrderType,
+                o.Status,
+                o.PaymentStatus,
+                o.CustomerId,
+                o.SubTotal,
+                o.ShippingFee,
+                o.DiscountAmount,
+                o.TotalAmount,
+                o.CreatedAt,
+                o.UpdatedAt,
+                Customer = o.Customer == null ? null : new
+                {
+                    o.Customer.UserId,
+                    o.Customer.Email,
+                    o.Customer.FullName,
+                    o.Customer.PhoneNumber,
+                    o.Customer.Gender,
+                    o.Customer.DateOfBirth,
+                    o.Customer.Status
+                },
+                Prescription = o.OrderPrescription == null ? null : new
+                {
+                    o.OrderPrescription.SavedPrescriptionId,
+                    o.OrderPrescription.RightSphere,
+                    o.OrderPrescription.RightCylinder,
+                    o.OrderPrescription.RightAxis,
+                    o.OrderPrescription.RightAdd,
+                    o.OrderPrescription.RightPD,
+                    o.OrderPrescription.LeftSphere,
+                    o.OrderPrescription.LeftCylinder,
+                    o.OrderPrescription.LeftAxis,
+                    o.OrderPrescription.LeftAdd,
+                    o.OrderPrescription.LeftPD,
+                    o.OrderPrescription.Notes,
+                    o.OrderPrescription.PrescribedBy,
+                    o.OrderPrescription.PrescriptionDate,
+                    o.OrderPrescription.CreatedAt
+                },
+                ShippingInfo = o.ShippingInfo == null ? null : new
+                {
+                    o.ShippingInfo.RecipientName,
+                    o.ShippingInfo.PhoneNumber,
+                    o.ShippingInfo.AddressLine,
+                    o.ShippingInfo.City,
+                    o.ShippingInfo.District,
+                    o.ShippingInfo.Ward,
+                    o.ShippingInfo.ShippingMethod,
+                    o.ShippingInfo.TrackingNumber,
+                    o.ShippingInfo.Carrier,
+                    o.ShippingInfo.ShippedAt,
+                    o.ShippingInfo.EstimatedDeliveryDate,
+                    o.ShippingInfo.DeliveredAt
+                },
+                Items = o.Items.Select(oi => new
+                {
+                    oi.OrderItemId,
+                    oi.UnitPrice,
+                    oi.Quantity,
+                    oi.SubTotal,
+                    oi.Description,
+                    InStock = oi.Variant == null ? false : oi.Variant.StockQuantity > 0,
+                    Variant = oi.Variant == null ? null : new
+                    {
+                        oi.Variant.VariantId,
+                        oi.Variant.Color,
+                        Product = oi.Variant.Product == null ? null : new
+                        {
+                            oi.Variant.Product.ProductId,
+                            oi.Variant.Product.ProductName,
+                            oi.Variant.Product.Sku,
+                            oi.Variant.Product.ProductType
+                        }
+                    }
+                }),
+                Payments = o.Payments.Select(p => new
+                {
+                    p.PaymentId,
+                    p.PaymentType,
+                    p.PaymentMethod,
+                    p.Amount,
+                    p.Status,
+                    p.CreatedAt
+                })
+            })
+            .FirstOrDefaultAsync(ct);
+
+        return order;
+    }
+    
+    public async Task<(bool success, string? error, int? statusCode)> DeleteAwaitingPaymentOrderAsync(
+        long customerId,
+        long orderId,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepository
+            .Query()
+            .FirstOrDefaultAsync(o => o.OrderId == orderId && o.CustomerId == customerId, ct);
+
+        if (order == null) return (false, "Order not found.", 404);
+
+        if (order.Status != OrderStatuses.AwaitingPayment || order.PaymentStatus != PaymentStatuses.Unpaid)
+        {
+            return (false, "Only unpaid orders awaiting payment can be deleted.", 400);
+        }
+
+        order.Status = OrderStatuses.Deleted;
+        order.UpdatedAt = DateTime.UtcNow;
+
+        await _orderRepository.SaveChangesAsync(ct);
+        return (true, null, 200);
+    }
+
     public async Task ChangeStatusAsync(long orderId, short newStatus, string role)
-{
-    var order = await _orderRepository
-        .Query()
-        .FirstOrDefaultAsync(o => o.OrderId == orderId);
+    {
+        var order = await _orderRepository
+            .Query()
+            .Include(o => o.Items)
+            .ThenInclude(oi => oi.Variant!)
+            .ThenInclude(v => v.Product)
+            .FirstOrDefaultAsync(o => o.OrderId == orderId);
 
-    if (order == null)
-        throw new Exception("Order not found");
+        if (order == null)
+            throw new Exception("Order not found");
 
-    if (!IsValidTransition(order.Status, newStatus, role))
-        throw new Exception("You are not allowed to change this order status");
+        if (!IsValidTransition(order.Status, newStatus, role, order))
+            throw new Exception("You are not allowed to change this order status");
 
-    order.Status = newStatus;
+        order.Status = newStatus;
 
-    await _orderRepository.SaveChangesAsync();
-}
+        await _orderRepository.SaveChangesAsync();
+    }
 
-    private bool IsValidTransition(short current, short next, string role)
+    private bool IsValidTransition(short current, short next, string role, Order order)
     {
         // SALES STAFF
         if (role == RoleNames.SalesSupport)
@@ -201,9 +460,60 @@ public class OrderService : IOrderService
         // OPERATION STAFF
         if (role == RoleNames.Operations)
         {
+            // PRESCRIPTION orders: Confirmed → Produced → Processing → Shipped → Delivered → Completed
+            if (order.OrderType == OrderTypes.Prescription)
+            {
+                return
+                    (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
+                    (current == OrderStatuses.Produced && next == OrderStatuses.Processing) ||
+                    (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                    (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
+                    (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
+                    (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
+                    (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+            }
+
+            // PRE_ORDER orders: Check if items need Produced 
+            if (order.OrderType == OrderTypes.PreOrder)
+            {
+                bool needsProduced = 
+                    // Check if has Combo
+                    order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Combo) ||
+                    // Check if has both Frame AND RxLens
+                    (order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Frame) &&
+                     order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.RxLens));
+
+                if (needsProduced)
+                {
+                    // PRE_ORDER with manufacturing: Confirmed → Produced → Processing → Shipped → Delivered → Completed
+                    return
+                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
+                        (current == OrderStatuses.Produced && next == OrderStatuses.Processing) ||
+                        (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                        (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
+                        (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
+                        (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
+                        (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                }
+                else
+                {
+                    // PRE_ORDER without manufacturing: Confirmed → Processing → Shipped → Delivered → Completed
+                    return
+                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
+                        (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                        (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
+                        (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
+                        (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
+                        (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                }
+            }
+
+            // AVAILABLE orders: Confirmed → Processing → Shipped → Delivered → Completed
             return
                 (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
                 (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
+                (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
                 (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
                 (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
         }
