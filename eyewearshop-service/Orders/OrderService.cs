@@ -460,12 +460,13 @@ public class OrderService : IOrderService
         // OPERATION STAFF
         if (role == RoleNames.Operations)
         {
-            // PRESCRIPTION orders: Confirmed → Produced → Shipped → Delivered → Completed
+            // PRESCRIPTION orders: Confirmed → Produced → Processing → Shipped → Delivered → Completed
             if (order.OrderType == OrderTypes.Prescription)
             {
                 return
                     (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
-                    (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
+                    (current == OrderStatuses.Produced && next == OrderStatuses.Processing) ||
+                    (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
                     (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                     (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
                     (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
@@ -484,10 +485,11 @@ public class OrderService : IOrderService
 
                 if (needsProduced)
                 {
-                    // PRE_ORDER with manufacturing: Confirmed → Produced → Shipped → Delivered → Completed
+                    // PRE_ORDER with manufacturing: Confirmed → Produced → Processing → Shipped → Delivered → Completed
                     return
                         (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
-                        (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
+                        (current == OrderStatuses.Produced && next == OrderStatuses.Processing) ||
+                        (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
                         (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                         (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
                         (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
