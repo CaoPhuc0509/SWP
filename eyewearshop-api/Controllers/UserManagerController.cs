@@ -210,37 +210,34 @@ public class UserManagerController : ControllerBase
     }
 
     /// <summary>
-    /// update user account status (deactivate) - delete account 
+    /// update user account status (0 = deactivate, 1 = activate)
     /// </summary>
-    [HttpPatch("{userId}/deactivate")]
-    public async Task<ActionResult> UpdateUserStatus([FromRoute] long userId, [FromBody] UpdateUserStatusRequest request, CancellationToken ct)
+    [HttpPatch("{userId}/status")]
+    public async Task<ActionResult> UpdateUserStatus(
+        [FromRoute] long userId,
+        [FromBody] UpdateUserStatusRequest request,
+        CancellationToken ct)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == userId, ct);
+        if (request.Status != 0 && request.Status != 1)
+            return BadRequest("Status must be 0 (deactivate) or 1 (activate)");
+
+        var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.UserId == userId, ct);
+
         if (user == null)
             return NotFound();
 
-        user.Status = 0; // Set status to 0 for deactivated
+        user.Status = request.Status;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
-        return Ok(new { Message = $"User status updated to {user.Status}" });
-    }
 
-    /// <summary>
-    /// update user account status (activate)
-    /// </summary>
-    [HttpPatch("{userId}/activate")]
-    public async Task<ActionResult> ActiveAccount([FromRoute] long userId, [FromBody] UpdateUserStatusRequest request, CancellationToken ct)
-    {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == userId, ct);
-        if (user == null)
-            return NotFound();
-
-        user.Status = 1; // Set status to 1 for activated
-        user.UpdatedAt = DateTime.UtcNow;
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(new { Message = $"User status updated to {user.Status}" });
+        return Ok(new
+        {
+            Message = "User status updated successfully",
+            user.UserId,
+            user.Status
+        });
     }
 
     /// <summary>

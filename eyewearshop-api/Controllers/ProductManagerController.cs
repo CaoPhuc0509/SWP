@@ -56,6 +56,7 @@ public class ProductManagerController : ControllerBase
             BasePrice = request.BasePrice,
             CategoryId = request.CategoryId,
             BrandId = request.BrandId,
+            Specifications = request.Specifications,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             Status = 1
@@ -146,7 +147,6 @@ public class ProductManagerController : ControllerBase
         if (!string.IsNullOrEmpty(request.Specifications))
             product.Specifications = request.Specifications;
 
-        product.Status = request.Status;
         product.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
@@ -189,7 +189,7 @@ public class ProductManagerController : ControllerBase
         _db.ProductVariants.Add(variant);
         await _db.SaveChangesAsync(ct);
 
-        // map sang DTO để tránh circular reference
+        
         var response = new VariantResponse(
             variant.VariantId,
             variant.ProductId,
@@ -243,13 +243,10 @@ public class ProductManagerController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(variant);
     }
-    /// <summary>
-    /// soft delete product (set status = 0)
-    /// </summary>
     [HttpPatch("{productId}/delete")]
     public async Task<ActionResult> SoftDeleteProduct(
-        [FromRoute] long productId,
-        CancellationToken ct)
+    [FromRoute] long productId,
+    CancellationToken ct)
     {
         var product = await _db.Products
             .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
@@ -259,6 +256,16 @@ public class ProductManagerController : ControllerBase
 
         product.Status = 0;
         product.UpdatedAt = DateTime.UtcNow;
+
+        var variants = await _db.ProductVariants
+            .Where(v => v.ProductId == productId)
+            .ToListAsync(ct);
+
+        foreach (var variant in variants)
+        {
+            variant.Status = 0;
+            variant.UpdatedAt = DateTime.UtcNow;
+        }
 
         await _db.SaveChangesAsync(ct);
 
@@ -272,8 +279,8 @@ public class ProductManagerController : ControllerBase
 }
 
 
-public record CreateProductRequest(string ProductName, string Sku, string? Description, string ProductType, decimal? BasePrice, long? CategoryId, long? BrandId);
-public record UpdateProductRequest(string? ProductName, string? Sku, string? Description, string? ProductType, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications, short Status);
+public record CreateProductRequest(string ProductName, string Sku, string? Description, string ProductType, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications);
+public record UpdateProductRequest(string? ProductName, string? Sku, string? Description, string? ProductType, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications);
 public record AddVariantRequest(
     string? Color,
     decimal Price,
