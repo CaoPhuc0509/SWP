@@ -202,12 +202,21 @@ public class CheckoutController : ControllerBase
         var subTotal = cartItemsWithProducts.Sum(item => item.Variant.Price * item.CartItem.Quantity);
 
         // Determine order type
+        var usesPreOrderQuantity = cartItemsWithProducts.Any(item =>
+            item.CartItem.Quantity > item.Variant.StockQuantity &&
+            item.Variant.PreOrderQuantity > 0);
+
         string orderType;
-        if (hasFrame && hasRxLens && request.PrescriptionId.HasValue)
+        if (requiresPrescription && usesPreOrderQuantity)
+        {
+            // Both prescription is required and some quantity must be fulfilled via pre-order
+            orderType = OrderTypes.PreOrderPrescription;
+        }
+        else if (requiresPrescription)
         {
             orderType = OrderTypes.Prescription;
         }
-        else if (cartItemsWithProducts.Any(item => item.CartItem.Quantity > item.Variant.StockQuantity && item.Variant.PreOrderQuantity > 0))
+        else if (usesPreOrderQuantity)
         {
             orderType = OrderTypes.PreOrder;
         }

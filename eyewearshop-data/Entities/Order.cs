@@ -6,7 +6,7 @@ public class Order
     public long CustomerId { get; set; }
 
     public string OrderNumber { get; set; } = null!;
-    public string OrderType { get; set; } = null!; // AVAILABLE, PRE_ORDER, PRESCRIPTION
+    public string OrderType { get; set; } = null!; // AVAILABLE, PRE_ORDER, PRESCRIPTION, PRE_ORDER_PRESCRIPTION
     public short Status { get; set; } = 0; // Using OrderStatuses constants
     public short PaymentStatus { get; set; } = PaymentStatuses.Unpaid; // Using PaymentStatuses constants
 
