@@ -290,7 +290,7 @@ public class ReturnRequestController : ControllerBase
         });
     }
     [HttpPut("{id}/status")]
-    [Authorize(Roles = RoleNames.Admin)]
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations},{RoleNames.Admin}")]
     public async Task<IActionResult> ChangeStatus(long id, [FromBody] short newStatus)
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value;

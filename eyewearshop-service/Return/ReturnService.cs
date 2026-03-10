@@ -10,10 +10,12 @@ namespace eyewearshop_service.Return
     public class ReturnService : IReturnService
     {
         private readonly IRepository<ReturnRequest> _returnRepository;
+        private readonly IRepository<Order> _orderRepository;
 
-        public ReturnService(IRepository<ReturnRequest> returnRepository)
+        public ReturnService(IRepository<ReturnRequest> returnRepository, IRepository<Order> orderRepository)
         {
             _returnRepository = returnRepository;
+            _orderRepository = orderRepository;
         }
 
         public async Task ChangeReturnStatusAsync(long returnId, short newStatus, string role)
@@ -29,6 +31,20 @@ namespace eyewearshop_service.Return
                 throw new Exception("You are not allowed to change this return status");
 
             request.Status = newStatus;
+
+            if (newStatus == ReturnRequestStatuses.Completed || newStatus == ReturnRequestStatuses.Rejected)
+            {
+                var order = await _orderRepository
+                    .Query()
+                    .FirstOrDefaultAsync(o => o.OrderId == request.OrderId);
+
+                if (order != null && order.Status == OrderStatuses.ReturnRequested)
+                {
+                    order.Status = newStatus == ReturnRequestStatuses.Completed
+                        ? OrderStatuses.ReturnApproved
+                        : OrderStatuses.ReturnRejected;
+                }
+            }
 
             await _returnRepository.SaveChangesAsync();
         }
@@ -147,15 +163,16 @@ namespace eyewearshop_service.Return
         
         private bool IsValidTransition(short currentStatus, short newStatus, string role)
         {
-            if (role != RoleNames.Admin)
-                return false;
-            if (currentStatus == ReturnRequestStatuses.Requested &&
-            (newStatus == ReturnRequestStatuses.Approved ||
+            if (role == RoleNames.SalesSupport &&
+                currentStatus == ReturnRequestStatuses.Requested &&
+                (newStatus == ReturnRequestStatuses.Approved ||
                  newStatus == ReturnRequestStatuses.Rejected))
                 return true;
 
-            if (currentStatus == ReturnRequestStatuses.Approved &&
-                newStatus == ReturnRequestStatuses.Completed)
+            if (role == RoleNames.Operations &&
+                currentStatus == ReturnRequestStatuses.Approved &&
+                (newStatus == ReturnRequestStatuses.Completed ||
+                 newStatus == ReturnRequestStatuses.Rejected))
                 return true;
 
             return false;
