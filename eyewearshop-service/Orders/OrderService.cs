@@ -452,9 +452,7 @@ public class OrderService : IOrderService
                 (current == OrderStatuses.Pending && next == OrderStatuses.Validated) ||
                 (current == OrderStatuses.Validated && next == OrderStatuses.Confirmed) ||
                 (current == OrderStatuses.Confirmed && next == OrderStatuses.Cancelled) ||
-                (current == OrderStatuses.Shipped && next == OrderStatuses.Completed) ||
-                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
-                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
+                (current == OrderStatuses.Shipped && next == OrderStatuses.Completed) ;
         }
 
         // OPERATION STAFF
@@ -469,8 +467,8 @@ public class OrderService : IOrderService
                     (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                     (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                     (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                    (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
-                    (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
             }
 
             // PRE_ORDER orders: Check if items need Produced 
@@ -492,8 +490,8 @@ public class OrderService : IOrderService
                         (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                         (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                         (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                        (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
-                        (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
                 }
                 else
                 {
@@ -503,8 +501,8 @@ public class OrderService : IOrderService
                         (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                         (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                         (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                        (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
-                        (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                     (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                        (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
                 }
             }
 
@@ -514,8 +512,8 @@ public class OrderService : IOrderService
                 (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                 (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                 (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
-                (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
         }
 
         return false;

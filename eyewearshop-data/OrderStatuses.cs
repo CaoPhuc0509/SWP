@@ -18,9 +18,7 @@ public static class OrderStatuses
     public const short Deleted = 9; // Order deleted after a period of time unpaid, or deleted by customer before payment
 
     // Return request statuses
-    public const short ReturnRequested = 10; // Customer submitted return request
-    public const short ReturnApproved = 11; // Staff approved return
-    public const short ReturnRejected = 12; // Staff rejected return
-    public const short ReturnProcessing = 13; // Return being processed
-    public const short ReturnCompleted = 14; // Return completed (refunded/exchanged)
+    public const short ReturnRequested = 11; // Customer submitted return request
+    public const short ReturnApproved = 12; // Staff approved return
+    public const short ReturnRejected = 13; // Staff rejected return
 }
