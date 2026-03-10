@@ -15,11 +15,13 @@ public class ReturnRequestController : ControllerBase
 {   
     private readonly EyewearShopDbContext _db;
     private readonly IReturnService _returnService;
+    private readonly IOrderService _orderService;
 
-    public ReturnRequestController(EyewearShopDbContext db, IReturnService returnService)
+    public ReturnRequestController(EyewearShopDbContext db, IReturnService returnService, IOrderService orderService)
     {
         _db = db;
         _returnService = returnService;
+        _orderService = orderService;
     }
 
     public record CreateReturnRequestRequest(
@@ -201,10 +203,11 @@ public class ReturnRequestController : ControllerBase
     /// Create a new return request for an order (order must be Delivered/Completed).
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = $"{RoleNames.Customer}")]
     public async Task<ActionResult> CreateReturnRequest([FromBody] CreateReturnRequestRequest request, CancellationToken ct)
     {
         var userId = GetUserIdOrThrow();
-
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
         // Validate request type
         if (!new[] { ReturnRequestTypes.Exchange, ReturnRequestTypes.Return, ReturnRequestTypes.Warranty }
             .Contains(request.RequestType.ToUpperInvariant()))
@@ -254,7 +257,7 @@ public class ReturnRequestController : ControllerBase
             CustomerId = userId,
             RequestType = request.RequestType.ToUpperInvariant(),
             RequestNumber = requestNumber,
-            Status = OrderStatuses.ReturnRequested,
+            Status = ReturnRequestStatuses.Requested,
             Reason = request.Reason,
             Description = request.Description,
             CreatedAt = now,
@@ -262,6 +265,7 @@ public class ReturnRequestController : ControllerBase
         };
 
         _db.ReturnRequests.Add(returnRequest);
+        _orderService.ChangeStatusAsync(request.OrderId, OrderStatuses.ReturnRequested, role);
         await _db.SaveChangesAsync(ct);
 
         // Add return request items

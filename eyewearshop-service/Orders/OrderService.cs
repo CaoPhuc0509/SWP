@@ -445,6 +445,14 @@ public class OrderService : IOrderService
 
     private bool IsValidTransition(short current, short next, string role, Order order)
     {
+        // CUSTOMER
+        if (role == RoleNames.Customer)
+        {
+            return
+                (current == OrderStatuses.AwaitingPayment && next == OrderStatuses.Deleted) || // Soft-delete by customer
+                (current == OrderStatuses.Delivered && next == OrderStatuses.ReturnRequested); // Request return after delivery
+        }
+
         // SALES STAFF
         if (role == RoleNames.SalesSupport)
         {
@@ -501,7 +509,7 @@ public class OrderService : IOrderService
                         (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                         (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                         (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                     (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                        (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
                         (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
                 }
             }
@@ -512,8 +520,8 @@ public class OrderService : IOrderService
                 (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                 (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                 (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
-                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
+                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
         }
 
         return false;
