@@ -2,6 +2,7 @@ using eyewearshop_data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using eyewearshop_data.Entities;
 
 namespace eyewearshop_api.Controllers;
 
@@ -42,17 +43,224 @@ public class ProductManagerController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new product
+    /// Get product detail
     /// </summary>
-    [HttpPost]
-    public async Task<ActionResult> CreateProduct([FromBody] CreateProductRequest request, CancellationToken ct)
+    [HttpGet("{productId}")]
+    public async Task<ActionResult> GetProductDetail(long productId, CancellationToken ct)
     {
-        var product = new eyewearshop_data.Entities.Product
+        var product = await _db.Products
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .Include(p => p.Brand)
+            .Include(p => p.Variants)
+            .Include(p => p.Images)
+            .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+
+        if (product == null)
+            return NotFound();
+
+        object? spec = null;
+
+        if (product.ProductType == ProductTypes.RxLens)
+        {
+            spec = await _db.RxLensSpecs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProductId == productId, ct);
+        }
+        else if (product.ProductType == ProductTypes.ContactLens)
+        {
+            spec = await _db.ContactLensSpecs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProductId == productId, ct);
+        }
+        else if (product.ProductType == ProductTypes.Frame)
+        {
+            spec = await _db.FrameSpecs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProductId == productId, ct);
+        }
+        else if (product.ProductType == ProductTypes.Combo || product.ProductType == ProductTypes.Sunglasses)
+        {
+            var rxSpec = await _db.RxLensSpecs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProductId == productId, ct);
+
+            var frameSpec = await _db.FrameSpecs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProductId == productId, ct);
+
+            spec = new
+            {
+                RxLensSpec = rxSpec,
+                FrameSpec = frameSpec
+            };
+        }
+
+        var result = new
+        {
+            product.ProductId,
+            product.ProductName,
+            product.Sku,
+            product.Description,
+            product.ProductType,
+            product.BasePrice,
+            product.Specifications,
+
+            Category = product.Category != null
+                ? new { product.Category.CategoryId, product.Category.CategoryName }
+                : null,
+
+            Brand = product.Brand != null
+                ? new { product.Brand.BrandId, product.Brand.BrandName }
+                : null,
+
+            Variants = product.Variants.Select(v => new
+            {
+                v.VariantId,
+                v.Color,
+                v.Price,
+                v.StockQuantity,
+                v.PreOrderQuantity,
+                v.Status
+            }),
+
+            Images = product.Images.Select(i => new
+            {
+                i.ImageId,
+                i.IsPrimary
+            }),
+
+            Spec = spec,
+            product.Status,
+            product.CreatedAt,
+            product.UpdatedAt
+        };
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Create a new product (combo)
+    /// </summary>
+    [HttpPost("combo")]
+    public async Task<ActionResult> CreateComboProduct([FromBody] CreateComboRequest request, CancellationToken ct)
+    {
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
+        try
+        {
+            // validate brand
+            var brandExists = await _db.Brands
+                .AnyAsync(x => x.BrandId == request.BrandId, ct);
+
+            if (!brandExists)
+                return BadRequest("Brand not found");
+
+            // validate category
+            var categoryExists = await _db.Categories
+                .AnyAsync(x => x.CategoryId == request.CategoryId, ct);
+
+            if (!categoryExists)
+                return BadRequest("Category not found");
+
+            // validate product type
+            if (request.ProductType != ProductTypes.Combo &&
+                request.ProductType != ProductTypes.Sunglasses)
+            {
+                return BadRequest("ProductType must be COMBO or SUNGLASSES");
+            }
+
+            var product = new eyewearshop_data.Entities.Product
+            {
+                ProductName = request.ProductName,
+                Sku = request.Sku,
+                Description = request.Description,
+                ProductType = request.ProductType,
+                BasePrice = request.BasePrice,
+                CategoryId = request.CategoryId,
+                BrandId = request.BrandId,
+                Specifications = request.Specifications,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                Status = 1
+            };
+
+            _db.Products.Add(product);
+            await _db.SaveChangesAsync(ct);
+
+            var rxLensSpec = new RxLensSpec
+            {
+                ProductId = product.ProductId,
+                DesignType = request.DesignType,
+                Material = request.rxLensMaterial,
+                LensWidth = request.LensWidth,
+                MinSphere = request.MinSphere,
+                MaxSphere = request.MaxSphere,
+                MinCylinder = request.MinCylinder,
+                MaxCylinder = request.MaxCylinder,
+                MinAxis = request.MinAxis,
+                MaxAxis = request.MaxAxis,
+                MinAdd = request.MinAdd,
+                MaxAdd = request.MaxAdd,
+                HasAntiReflective = request.HasAntiReflective,
+                HasBlueLightFilter = request.HasBlueLightFilter,
+                HasUVProtection = request.HasUVProtection,
+                HasScratchResistant = request.HasScratchResistant,
+                Status = 1
+            };
+
+            var frameSpec = new FrameSpec
+            {
+                ProductId = product.ProductId,
+                RimType = request.RimType,
+                Material = request.FrameMaterial,
+                Shape = request.Shape,
+                Weight = request.Weight,
+                A = request.A,
+                B = request.B,
+                Dbl = request.Dbl,
+                TempleLength = request.TempleLength,
+                LensWidth = request.FrameLensWidth,
+                HingeType = request.HingeType,
+                HasNosePads = request.HasNosePads,
+                Status = 1
+            };
+
+            _db.RxLensSpecs.Add(rxLensSpec);
+            _db.FrameSpecs.Add(frameSpec);
+
+            await _db.SaveChangesAsync(ct);
+
+            await transaction.CommitAsync(ct);
+
+            return Ok(new
+            {
+                productId = product.ProductId,
+                message = "is created"
+            });
+        }
+        catch
+        {
+            await transaction.RollbackAsync(ct);
+            return StatusCode(500, new
+            {
+                isCreated = false
+            });
+        }
+    }
+
+    /// <summary>
+    /// Create a new product (rxlens)
+    /// </summary>
+    [HttpPost("rxlens")]
+    public async Task<ActionResult> CreateRxLens([FromBody] CreateRxLensRequest request, CancellationToken ct)
+    {
+        var product = new Product
         {
             ProductName = request.ProductName,
             Sku = request.Sku,
             Description = request.Description,
-            ProductType = request.ProductType,
+            ProductType = ProductTypes.RxLens,
             BasePrice = request.BasePrice,
             CategoryId = request.CategoryId,
             BrandId = request.BrandId,
@@ -65,92 +273,354 @@ public class ProductManagerController : ControllerBase
         _db.Products.Add(product);
         await _db.SaveChangesAsync(ct);
 
-        return CreatedAtAction(nameof(GetProductDetail), new { productId = product.ProductId }, product);
+        var rxLensSpec = new RxLensSpec
+        {
+            ProductId = product.ProductId,
+            DesignType = request.DesignType,
+            Material = request.Material,
+            LensWidth = request.LensWidth,
+            MinSphere = request.MinSphere,
+            MaxSphere = request.MaxSphere,
+            MinCylinder = request.MinCylinder,
+            MaxCylinder = request.MaxCylinder,
+            MinAxis = request.MinAxis,
+            MaxAxis = request.MaxAxis,
+            MinAdd = request.MinAdd,
+            MaxAdd = request.MaxAdd,
+            HasAntiReflective = request.HasAntiReflective,
+            HasBlueLightFilter = request.HasBlueLightFilter,
+            HasUVProtection = request.HasUVProtection,
+            HasScratchResistant = request.HasScratchResistant,
+            Status = 1
+        };
+
+        _db.RxLensSpecs.Add(rxLensSpec);
+        await _db.SaveChangesAsync(ct);
+
+        return CreatedAtAction(
+    nameof(GetProductDetail),
+    new { productId = product.ProductId },
+    new { productId = product.ProductId });
+    }
+    /// <summary>
+    /// Create a new product (contactlens)
+    /// </summary>
+
+    [HttpPost("contactlens")]
+    public async Task<ActionResult> CreateContactLens([FromBody] CreateContactLensRequest request, CancellationToken ct)
+    {
+        var product = new Product
+        {
+            ProductName = request.ProductName,
+            Sku = request.Sku,
+            Description = request.Description,
+            ProductType = ProductTypes.ContactLens,
+            BasePrice = request.BasePrice,
+            CategoryId = request.CategoryId,
+            BrandId = request.BrandId,
+            Specifications = request.Specifications,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Status = 1
+        };
+
+        _db.Products.Add(product);
+        await _db.SaveChangesAsync(ct);
+
+        var contactLensSpec = new ContactLensSpec
+        {
+            ProductId = product.ProductId,
+            BaseCurve = request.BaseCurve,
+            Diameter = request.Diameter,
+            MinSphere = request.MinSphere,
+            MaxSphere = request.MaxSphere,
+            MinCylinder = request.MinCylinder,
+            MaxCylinder = request.MaxCylinder,
+            MinAxis = request.MinAxis,
+            MaxAxis = request.MaxAxis,
+            LensType = request.LensType,
+            Material = request.Material,
+            WaterContent = request.WaterContent,
+            OxygenPermeability = request.OxygenPermeability,
+            ReplacementSchedule = request.ReplacementSchedule,
+            IsToric = request.IsToric,
+            IsMultifocal = request.IsMultifocal,
+            Status = 1
+        };
+
+        _db.ContactLensSpecs.Add(contactLensSpec);
+        await _db.SaveChangesAsync(ct);
+
+        return CreatedAtAction(
+    nameof(GetProductDetail),
+    new { productId = product.ProductId },
+    new { productId = product.ProductId }
+);
     }
 
     /// <summary>
-    /// Get product detail
+    /// Create a new product (frame)
     /// </summary>
-    [HttpGet("{productId}")]
-    public async Task<ActionResult> GetProductDetail([FromRoute] long productId, CancellationToken ct)
+    [HttpPost("frame")]
+    public async Task<ActionResult> CreateFrame([FromBody] CreateFrameRequest request, CancellationToken ct)
+    {
+        var product = new Product
+        {
+            ProductName = request.ProductName,
+            Sku = request.Sku,
+            Description = request.Description,
+            ProductType = ProductTypes.Frame,
+            BasePrice = request.BasePrice,
+            CategoryId = request.CategoryId,
+            BrandId = request.BrandId,
+            Specifications = request.Specifications,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Status = 1
+        };
+
+        _db.Products.Add(product);
+        await _db.SaveChangesAsync(ct);
+
+        var frameSpec = new FrameSpec
+        {
+            ProductId = product.ProductId,
+            RimType = request.RimType,
+            Material = request.Material,
+            Shape = request.Shape,
+            Weight = request.Weight,
+            A = request.A,
+            B = request.B,
+            Dbl = request.Dbl,
+            TempleLength = request.TempleLength,
+            LensWidth = request.LensWidth,
+            HingeType = request.HingeType,
+            HasNosePads = request.HasNosePads,
+            Status = 1
+        };
+
+        _db.FrameSpecs.Add(frameSpec);
+        await _db.SaveChangesAsync(ct);
+
+        return CreatedAtAction(
+    nameof(GetProductDetail),
+    new { productId = product.ProductId },
+    new { productId = product.ProductId }
+);
+    }
+
+
+
+
+    /// <summary>
+    /// update product info (combo)
+    /// </summary>
+    [HttpPut("combo/{productId}")]
+    public async Task<ActionResult> UpdateComboProduct(long productId, [FromBody] UpdateComboRequest request, CancellationToken ct)
     {
         var product = await _db.Products
-            .AsNoTracking()
-            .Include(p => p.Category)
-            .Include(p => p.Brand)
-            .Include(p => p.Variants)
-            .Include(p => p.Images)
-            .Include(p => p.SunglassesSpec)
-            .Include(p => p.FrameSpec)
             .Include(p => p.RxLensSpec)
-            .Include(p => p.ContactLensSpec)
-            .Select(p => new
-            {
-                p.ProductId,
-                p.ProductName,
-                p.Sku,
-                p.Description,
-                p.ProductType,
-                p.BasePrice,
-                p.Specifications,
-                Category = p.Category != null ? new { p.Category.CategoryId, p.Category.CategoryName } : null,
-                Brand = p.Brand != null ? new { p.Brand.BrandId, p.Brand.BrandName } : null,
-                p.Variants,
-                p.Images,
-                p.SunglassesSpec,
-                p.FrameSpec,
-                p.RxLensSpec,
-                p.ContactLensSpec,
-                p.Status,
-                p.CreatedAt,
-                p.UpdatedAt
-            })
+            .Include(p => p.FrameSpec)
             .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
         if (product == null)
-            return NotFound();
+            return NotFound("Product not found");
 
-        return Ok(product);
+        if (product.ProductType != ProductTypes.Combo)
+            return Conflict("Product type mismatch. This product is not Combo.");
+
+        // Update common product fields
+        product.ProductName = request.ProductName ?? product.ProductName;
+        product.Sku = request.Sku ?? product.Sku;
+        product.Description = request.Description ?? product.Description;
+        product.BasePrice = request.BasePrice ?? product.BasePrice;
+        product.CategoryId = request.CategoryId ?? product.CategoryId;
+        product.BrandId = request.BrandId ?? product.BrandId;
+        product.Specifications = request.Specifications ?? product.Specifications;
+
+        // Update RxLensSpec fields
+        if (product.RxLensSpec != null)
+        {
+            product.RxLensSpec.DesignType = request.DesignType ?? product.RxLensSpec.DesignType;
+            product.RxLensSpec.Material = request.rxLensMaterial ?? product.RxLensSpec.Material;
+            product.RxLensSpec.LensWidth = request.LensWidth ?? product.RxLensSpec.LensWidth;
+            product.RxLensSpec.MinSphere = request.MinSphere ?? product.RxLensSpec.MinSphere;
+            product.RxLensSpec.MaxSphere = request.MaxSphere ?? product.RxLensSpec.MaxSphere;
+            product.RxLensSpec.MinCylinder = request.MinCylinder ?? product.RxLensSpec.MinCylinder;
+            product.RxLensSpec.MaxCylinder = request.MaxCylinder ?? product.RxLensSpec.MaxCylinder;
+            product.RxLensSpec.MinAxis = request.MinAxis ?? product.RxLensSpec.MinAxis;
+            product.RxLensSpec.MaxAxis = request.MaxAxis ?? product.RxLensSpec.MaxAxis;
+            product.RxLensSpec.MinAdd = request.MinAdd ?? product.RxLensSpec.MinAdd;
+            product.RxLensSpec.MaxAdd = request.MaxAdd ?? product.RxLensSpec.MaxAdd;
+            product.RxLensSpec.HasAntiReflective = request.HasAntiReflective ?? product.RxLensSpec.HasAntiReflective;
+            product.RxLensSpec.HasBlueLightFilter = request.HasBlueLightFilter ?? product.RxLensSpec.HasBlueLightFilter;
+            product.RxLensSpec.HasUVProtection = request.HasUVProtection ?? product.RxLensSpec.HasUVProtection;
+            product.RxLensSpec.HasScratchResistant = request.HasScratchResistant ?? product.RxLensSpec.HasScratchResistant;
+        }
+        product.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        if (product.FrameSpec != null)
+        {
+            // Update FrameSpec fields
+            product.FrameSpec.RimType = request.RimType ?? product.FrameSpec.RimType;
+            product.FrameSpec.Material = request.FrameMaterial ?? product.FrameSpec.Material;
+            product.FrameSpec.Shape = request.Shape ?? product.FrameSpec.Shape;
+            product.FrameSpec.Weight = request.Weight ?? product.FrameSpec.Weight;
+            product.FrameSpec.A = request.A ?? product.FrameSpec.A;
+            product.FrameSpec.B = request.B ?? product.FrameSpec.B;
+            product.FrameSpec.Dbl = request.Dbl ?? product.FrameSpec.Dbl;
+            product.FrameSpec.TempleLength = request.TempleLength ?? product.FrameSpec.TempleLength;
+            product.FrameSpec.LensWidth = request.FrameLensWidth ?? product.FrameSpec.LensWidth;
+            product.FrameSpec.HingeType = request.HingeType ?? product.FrameSpec.HingeType;
+            product.FrameSpec.HasNosePads = request.HasNosePads ?? product.FrameSpec.HasNosePads;
+        }
+        product.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { productId = product.ProductId, message = "is updated" });
     }
 
     /// <summary>
-    /// update product info
+    /// update product info (rxlens)
     /// </summary>
-    [HttpPut("{productId}")]
-    public async Task<ActionResult> UpdateProduct([FromRoute] long productId, [FromBody] UpdateProductRequest request, CancellationToken ct)
+    [HttpPut("lens/{productId}")]
+    public async Task<ActionResult> UpdateRxLens(long productId, [FromBody] UpdateLensRequest request, CancellationToken ct)
     {
-        var product = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+        var product = await _db.Products
+            .Include(p => p.RxLensSpec)
+            .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+
         if (product == null)
-            return NotFound();
+            return NotFound("Product not found");
 
-        if (!string.IsNullOrEmpty(request.ProductName))
-            product.ProductName = request.ProductName;
+        if (product.ProductType != ProductTypes.RxLens)
+            return Conflict("Product type mismatch. This product is not RX Lens.");
 
-        if (!string.IsNullOrEmpty(request.Sku))
-            product.Sku = request.Sku;
+        if (product.RxLensSpec == null)
+            return Conflict("RX Lens specification not found");
 
-        if (!string.IsNullOrEmpty(request.Description))
-            product.Description = request.Description;
+        product.ProductName = request.ProductName ?? product.ProductName;
+        product.Sku = request.Sku ?? product.Sku;
+        product.Description = request.Description ?? product.Description;
+        product.BasePrice = request.BasePrice ?? product.BasePrice;
+        product.CategoryId = request.CategoryId ?? product.CategoryId;
+        product.BrandId = request.BrandId ?? product.BrandId;
 
-        if (!string.IsNullOrEmpty(request.ProductType))
-            product.ProductType = request.ProductType;
+        product.RxLensSpec.DesignType = request.DesignType ?? product.RxLensSpec.DesignType;
+        product.RxLensSpec.Material = request.Material ?? product.RxLensSpec.Material;
+        product.RxLensSpec.LensWidth = request.LensWidth ?? product.RxLensSpec.LensWidth;
+        product.RxLensSpec.MinSphere = request.MinSphere ?? product.RxLensSpec.MinSphere;
+        product.RxLensSpec.MaxSphere = request.MaxSphere ?? product.RxLensSpec.MaxSphere;
+        product.RxLensSpec.MinCylinder = request.MinCylinder ?? product.RxLensSpec.MinCylinder;
+        product.RxLensSpec.MaxCylinder = request.MaxCylinder ?? product.RxLensSpec.MaxCylinder;
+        product.RxLensSpec.MinAxis = request.MinAxis ?? product.RxLensSpec.MinAxis;
+        product.RxLensSpec.MaxAxis = request.MaxAxis ?? product.RxLensSpec.MaxAxis;
+        product.RxLensSpec.MinAdd = request.MinAdd ?? product.RxLensSpec.MinAdd;
+        product.RxLensSpec.MaxAdd = request.MaxAdd ?? product.RxLensSpec.MaxAdd;
+        product.RxLensSpec.HasAntiReflective = request.HasAntiReflective ?? product.RxLensSpec.HasAntiReflective;
+        product.RxLensSpec.HasBlueLightFilter = request.HasBlueLightFilter ?? product.RxLensSpec.HasBlueLightFilter;
+        product.RxLensSpec.HasUVProtection = request.HasUVProtection ?? product.RxLensSpec.HasUVProtection;
+        product.RxLensSpec.HasScratchResistant = request.HasScratchResistant ?? product.RxLensSpec.HasScratchResistant;
+        product.UpdatedAt = DateTime.UtcNow;
 
-        if (request.BasePrice.HasValue)
-            product.BasePrice = request.BasePrice;
+        await _db.SaveChangesAsync(ct);
 
-        if (request.CategoryId.HasValue)
-            product.CategoryId = request.CategoryId;
+        return Ok(new { productId = product.ProductId, message = "is updated" });
+    }
 
-        if (request.BrandId.HasValue)
-            product.BrandId = request.BrandId;
+    /// <summary>
+    /// update product info (contact lens)
+    /// </summary>
+    [HttpPut("contact-lens/{productId}")]
+    public async Task<ActionResult> UpdateContactLens(long productId, [FromBody] UpdateContactLensRequest request, CancellationToken ct)
+    {
+        var product = await _db.Products
+            .Include(p => p.ContactLensSpec)
+            .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
-        if (!string.IsNullOrEmpty(request.Specifications))
-            product.Specifications = request.Specifications;
+        if (product == null)
+            return NotFound("Product not found");
+
+        if (product.ProductType != ProductTypes.ContactLens)
+            return Conflict("Product type mismatch. This product is not Contact Lens.");
+
+        if (product.ContactLensSpec == null)
+            return Conflict("Contact Lens specification not found");
+
+        product.ProductName = request.ProductName ?? product.ProductName;
+        product.Sku = request.Sku ?? product.Sku;
+        product.Description = request.Description ?? product.Description;
+        product.BasePrice = request.BasePrice ?? product.BasePrice;
+        product.CategoryId = request.CategoryId ?? product.CategoryId;
+        product.BrandId = request.BrandId ?? product.BrandId;
+
+        product.ContactLensSpec.Material = request.Material ?? product.ContactLensSpec.Material;
+        product.ContactLensSpec.WaterContent = request.WaterContent ?? product.ContactLensSpec.WaterContent;
+        product.ContactLensSpec.BaseCurve = request.BaseCurve ?? product.ContactLensSpec.BaseCurve;
+        product.ContactLensSpec.Diameter = request.Diameter ?? product.ContactLensSpec.Diameter;
+        product.ContactLensSpec.MinSphere = request.MinSphere ?? product.ContactLensSpec.MinSphere;
+        product.ContactLensSpec.MaxSphere = request.MaxSphere ?? product.ContactLensSpec.MaxSphere;
+        product.ContactLensSpec.MinCylinder = request.MinCylinder ?? product.ContactLensSpec.MinCylinder;
+        product.ContactLensSpec.MaxCylinder = request.MaxCylinder ?? product.ContactLensSpec.MaxCylinder;
+        product.ContactLensSpec.MinAxis = request.MinAxis ?? product.ContactLensSpec.MinAxis;
+        product.ContactLensSpec.MaxAxis = request.MaxAxis ?? product.ContactLensSpec.MaxAxis;
+        product.ContactLensSpec.LensType = request.LensType ?? product.ContactLensSpec.LensType;
+        product.ContactLensSpec.OxygenPermeability = request.OxygenPermeability ?? product.ContactLensSpec.OxygenPermeability;
+        product.ContactLensSpec.ReplacementSchedule = request.ReplacementSchedule ?? product.ContactLensSpec.ReplacementSchedule;
+        product.ContactLensSpec.IsToric = request.IsToric ?? product.ContactLensSpec.IsToric;
+        product.ContactLensSpec.IsMultifocal = request.IsMultifocal ?? product.ContactLensSpec.IsMultifocal;
 
         product.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
-        return Ok(product);
+
+        return Ok(new { productId = product.ProductId, message = "is updated" });
+    }
+
+    /// <summary>
+    /// update product info (frame)
+    /// </summary>
+    [HttpPut("frame/{productId}")]
+    public async Task<ActionResult> UpdateFrame(long productId, [FromBody] UpdateFrameRequest request, CancellationToken ct)
+    {
+        var product = await _db.Products
+            .Include(p => p.FrameSpec)
+            .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
+
+        if (product == null)
+            return NotFound("Product not found");
+
+        if (product.ProductType != ProductTypes.Frame)
+            return Conflict("Product type mismatch. This product is not Frame.");
+
+        if (product.FrameSpec == null)
+            return Conflict("Frame specification not found");
+
+        product.ProductName = request.ProductName ?? product.ProductName;
+        product.Sku = request.Sku ?? product.Sku;
+        product.Description = request.Description ?? product.Description;
+        product.BasePrice = request.BasePrice ?? product.BasePrice;
+        product.CategoryId = request.CategoryId ?? product.CategoryId;
+        product.BrandId = request.BrandId ?? product.BrandId;
+
+        product.FrameSpec.RimType = request.RimType ?? product.FrameSpec.RimType;
+        product.FrameSpec.Material = request.Material ?? product.FrameSpec.Material;
+        product.FrameSpec.Shape = request.Shape ?? product.FrameSpec.Shape;
+        product.FrameSpec.Weight = request.Weight ?? product.FrameSpec.Weight;
+        product.FrameSpec.A = request.A ?? product.FrameSpec.A;
+        product.FrameSpec.B = request.B ?? product.FrameSpec.B;
+        product.FrameSpec.Dbl = request.Dbl ?? product.FrameSpec.Dbl;
+        product.FrameSpec.TempleLength = request.TempleLength ?? product.FrameSpec.TempleLength;
+        product.FrameSpec.LensWidth = request.LensWidth ?? product.FrameSpec.LensWidth;
+        product.FrameSpec.HingeType = request.HingeType ?? product.FrameSpec.HingeType;
+        product.FrameSpec.HasNosePads = request.HasNosePads ?? product.FrameSpec.HasNosePads;
+
+        product.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { productId = product.ProductId, message = "is updated" });
     }
 
     /// <summary>
@@ -189,7 +659,6 @@ public class ProductManagerController : ControllerBase
         _db.ProductVariants.Add(variant);
         await _db.SaveChangesAsync(ct);
 
-        
         var response = new VariantResponse(
             variant.VariantId,
             variant.ProductId,
@@ -216,11 +685,7 @@ public class ProductManagerController : ControllerBase
     /// update variant of product
     /// </summary>
     [HttpPut("{productId}/variants/{variantId}")]
-    public async Task<ActionResult> UpdateVariant(
-    [FromRoute] long productId,
-    [FromRoute] long variantId,
-    [FromBody] UpdateVariantRequest request,
-    CancellationToken ct)
+    public async Task<ActionResult> UpdateVariant([FromRoute] long productId, [FromRoute] long variantId, [FromBody] UpdateVariantRequest request, CancellationToken ct)
     {
         var variant = await _db.ProductVariants
             .FirstOrDefaultAsync(v => v.VariantId == variantId && v.ProductId == productId, ct);
@@ -243,44 +708,190 @@ public class ProductManagerController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(variant);
     }
-    [HttpPatch("{productId}/delete")]
-    public async Task<ActionResult> SoftDeleteProduct(
-    [FromRoute] long productId,
-    CancellationToken ct)
+
+    /// <summary>
+    /// update status of product - delete product (status = 0)
+    /// </summary>
+    [HttpPut("{status}/products/{productId}")]
+    public async Task<ActionResult> UpdateProductStatus([FromRoute] long productId, [FromRoute] short status, CancellationToken ct)
     {
-        var product = await _db.Products
-            .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
-
+        var product = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == productId, ct);
         if (product == null)
-            return NotFound("Product not found");
+            return NotFound();
+        if (status != 0 && status != 1)
+            return BadRequest("Invalid status value. Status must be either 0 (inactive) or 1 (active).");
 
-        product.Status = 0;
+        product.Status = status;
         product.UpdatedAt = DateTime.UtcNow;
-
-        var variants = await _db.ProductVariants
-            .Where(v => v.ProductId == productId)
-            .ToListAsync(ct);
-
-        foreach (var variant in variants)
-        {
-            variant.Status = 0;
-            variant.UpdatedAt = DateTime.UtcNow;
-        }
-
         await _db.SaveChangesAsync(ct);
-
-        return Ok(new
-        {
-            Message = "Product deleted successfully",
-            product.ProductId,
-            product.Status
-        });
+        return Ok(new { productId = product.ProductId, message = status == 0 ? "is deactivated" : "is activated" });
     }
 }
 
+public record CreateComboRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? ProductType, string? Specifications,
+    // combo-specific fields
+    //rxlens fields
+    string? DesignType,
+    string? rxLensMaterial,
+    decimal? LensWidth,
+    decimal? MinSphere,
+    decimal? MaxSphere,
+    decimal? MinCylinder,
+    decimal? MaxCylinder,
+    decimal? MinAxis,
+    decimal? MaxAxis,
+    decimal? MinAdd,
+    decimal? MaxAdd,
+    bool? HasAntiReflective,
+    bool? HasBlueLightFilter,
+    bool? HasUVProtection,
+    bool? HasScratchResistant,
+    //frame fields
+    string? RimType,
+    string? FrameMaterial,
+    string? Shape,
+    decimal? Weight,
+    decimal? A,
+    decimal? B,
+    decimal? Dbl,
+    decimal? TempleLength,
+    decimal? FrameLensWidth,
+    string? HingeType,
+    bool? HasNosePads
+);
+public record CreateRxLensRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+    // RxLensSpec fields
+    string? DesignType,
+    string? Material,
+    decimal? LensWidth,
+    decimal? MinSphere,
+    decimal? MaxSphere,
+    decimal? MinCylinder,
+    decimal? MaxCylinder,
+    decimal? MinAxis,
+    decimal? MaxAxis,
+    decimal? MinAdd,
+    decimal? MaxAdd,
+    bool? HasAntiReflective,
+    bool? HasBlueLightFilter,
+    bool? HasUVProtection,
+    bool? HasScratchResistant
+);
+public record CreateContactLensRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
 
-public record CreateProductRequest(string ProductName, string Sku, string? Description, string ProductType, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications);
-public record UpdateProductRequest(string? ProductName, string? Sku, string? Description, string? ProductType, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications);
+    // ContactLensSpec fields
+    decimal? BaseCurve,
+    decimal? Diameter,
+    decimal? MinSphere,
+    decimal? MaxSphere,
+    decimal? MinCylinder,
+    decimal? MaxCylinder,
+    decimal? MinAxis,
+    decimal? MaxAxis,
+    string? LensType,
+    string? Material,
+    int? WaterContent,
+    int? OxygenPermeability,
+    int? ReplacementSchedule,
+    bool? IsToric,
+    bool? IsMultifocal
+);
+public record CreateFrameRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+    // FrameSpec fields
+    string? RimType,
+    string? Material,
+    string? Shape,
+    decimal? Weight,
+    decimal? A,
+    decimal? B,
+    decimal? Dbl,
+    decimal? TempleLength,
+    decimal? LensWidth,
+    string? HingeType,
+    bool? HasNosePads
+);
+public record UpdateComboRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+    // combo-specific fields
+    //rxlens fields
+    string? DesignType,
+    string? rxLensMaterial,
+    decimal? LensWidth,
+    decimal? MinSphere,
+    decimal? MaxSphere,
+    decimal? MinCylinder,
+    decimal? MaxCylinder,
+    decimal? MinAxis,
+    decimal? MaxAxis,
+    decimal? MinAdd,
+    decimal? MaxAdd,
+    bool? HasAntiReflective,
+    bool? HasBlueLightFilter,
+    bool? HasUVProtection,
+    bool? HasScratchResistant,
+    //frame fields
+    string? RimType,
+    string? FrameMaterial,
+    string? Shape,
+    decimal? Weight,
+    decimal? A,
+    decimal? B,
+    decimal? Dbl,
+    decimal? TempleLength,
+    decimal? FrameLensWidth,
+    string? HingeType,
+    bool? HasNosePads
+);
+public record UpdateLensRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+    // RxLensSpec fields
+    string? DesignType,
+    string? Material,
+    decimal? LensWidth,
+    decimal? MinSphere,
+    decimal? MaxSphere,
+    decimal? MinCylinder,
+    decimal? MaxCylinder,
+    decimal? MinAxis,
+    decimal? MaxAxis,
+    decimal? MinAdd,
+    decimal? MaxAdd,
+    bool? HasAntiReflective,
+    bool? HasBlueLightFilter,
+    bool? HasUVProtection,
+    bool? HasScratchResistant
+);
+public record UpdateContactLensRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+
+    // ContactLensSpec fields
+    decimal? BaseCurve,
+    decimal? Diameter,
+    decimal? MinSphere,
+    decimal? MaxSphere,
+    decimal? MinCylinder,
+    decimal? MaxCylinder,
+    decimal? MinAxis,
+    decimal? MaxAxis,
+    string? LensType,
+    string? Material,
+    int? WaterContent,
+    int? OxygenPermeability,
+    int? ReplacementSchedule,
+    bool? IsToric,
+    bool? IsMultifocal
+);
+public record UpdateFrameRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+    // FrameSpec fields
+    string? RimType,
+    string? Material,
+    string? Shape,
+    decimal? Weight,
+    decimal? A,
+    decimal? B,
+    decimal? Dbl,
+    decimal? TempleLength,
+    decimal? LensWidth,
+    string? HingeType,
+    bool? HasNosePads
+);
 public record AddVariantRequest(
     string? Color,
     decimal Price,
