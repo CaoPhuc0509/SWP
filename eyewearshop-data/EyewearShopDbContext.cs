@@ -699,7 +699,7 @@ public class EyewearShopDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             e.HasOne(x => x.OrderItem)
-                .WithMany()
+                .WithMany(oi => oi.ReturnRequestItems)
                 .HasForeignKey(x => x.OrderItemId)
                 .OnDelete(DeleteBehavior.Restrict);
         });

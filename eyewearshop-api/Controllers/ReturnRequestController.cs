@@ -265,7 +265,6 @@ public class ReturnRequestController : ControllerBase
         };
 
         _db.ReturnRequests.Add(returnRequest);
-        _orderService.ChangeStatusAsync(request.OrderId, OrderStatuses.ReturnRequested, role);
         await _db.SaveChangesAsync(ct);
 
         // Add return request items
@@ -278,6 +277,10 @@ public class ReturnRequestController : ControllerBase
                 Quantity = item.Quantity
             });
         }
+
+        // Update order status directly on the already-tracked entity
+        order.Status = OrderStatuses.ReturnRequested;
+        order.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
 
