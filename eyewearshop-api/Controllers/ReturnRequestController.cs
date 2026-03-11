@@ -109,11 +109,15 @@ public class ReturnRequestController : ControllerBase
     [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
     [HttpGet("all")]
     public async Task<ActionResult> GetAllReturnRequests(
+        [FromQuery] string? requestType,
+        [FromQuery] short? status,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
         var result = await _returnService.GetAllReturnRequestsAsync(
+            requestType,
+            status,
             page,
             pageSize,
             ct);

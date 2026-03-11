@@ -50,6 +50,8 @@ namespace eyewearshop_service.Return
         }
 
         public async Task<object> GetAllReturnRequestsAsync(
+            string? requestType,
+            short? status,
             int page,
             int pageSize,
             CancellationToken ct = default)
@@ -60,6 +62,16 @@ namespace eyewearshop_service.Return
             var query = _returnRepository
                 .Query()
                 .AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(requestType))
+            {
+                query = query.Where(rr => rr.RequestType == requestType.Trim().ToUpperInvariant());
+            }
+
+            if (status.HasValue)
+            {
+                query = query.Where(rr => rr.Status == status.Value);
+            }
 
             var total = await query.CountAsync(ct);
 
@@ -78,6 +90,15 @@ namespace eyewearshop_service.Return
                     rr.CustomerId,
                     rr.CreatedAt,
                     rr.UpdatedAt,
+                    Customer = new
+                    {
+                        rr.Customer.UserId,
+                        rr.Customer.Email,
+                        rr.Customer.FullName,
+                        rr.Customer.PhoneNumber,
+                        rr.Customer.Gender,
+                        rr.Customer.DateOfBirth
+                    },
                     Order = new
                     {
                         rr.Order.OrderId,
@@ -121,6 +142,15 @@ namespace eyewearshop_service.Return
                     rr.CustomerId,
                     rr.CreatedAt,
                     rr.UpdatedAt,
+                    Customer = new
+                    {
+                        rr.Customer.UserId,
+                        rr.Customer.Email,
+                        rr.Customer.FullName,
+                        rr.Customer.PhoneNumber,
+                        rr.Customer.Gender,
+                        rr.Customer.DateOfBirth
+                    },
                     Order = new
                     {
                         rr.Order.OrderId,
