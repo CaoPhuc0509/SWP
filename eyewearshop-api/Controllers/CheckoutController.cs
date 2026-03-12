@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using eyewearshop_api.Services;
 using eyewearshop_data;
 using eyewearshop_data.Entities;
 using eyewearshop_service.Cart;
@@ -16,15 +17,19 @@ public class CheckoutController : ControllerBase
 {
     private readonly EyewearShopDbContext _db;
     private readonly ISessionCartService _cartService;
+    private readonly IGhnShippingService _ghn;
 
-    public CheckoutController(EyewearShopDbContext db, ISessionCartService cartService)
+    public CheckoutController(EyewearShopDbContext db, ISessionCartService cartService, IGhnShippingService ghn)
     {
         _db = db;
         _cartService = cartService;
+        _ghn = ghn;
     }
 
     public record CheckoutRequest(
-        long AddressId, 
+        long? AddressId,
+        int? ToDistrictId,
+        string? ToWardCode,
         long? PrescriptionId,
         string? PromoCode = null,
         string? ShippingMethod = null);
@@ -89,6 +94,74 @@ public class CheckoutController : ControllerBase
     }
 
     /// <summary>
+    /// Preview shipping fee from GHN before placing an order.
+    /// Also returns estimated subTotal, discountAmount and total so the customer can see full cost.
+    /// </summary>
+    [HttpGet("shipping-fee")]
+    public async Task<ActionResult> GetShippingFee(
+        [FromQuery] int toDistrictId,
+        [FromQuery] string toWardCode,
+        [FromQuery] string? promoCode = null,
+        CancellationToken ct = default)
+    {
+        if (toDistrictId <= 0 || string.IsNullOrWhiteSpace(toWardCode))
+            return BadRequest("toDistrictId and toWardCode are required.");
+
+        await HttpContext.Session.LoadAsync(ct);
+        var cartItems = _cartService.GetCart();
+        if (cartItems.Count == 0)
+            return BadRequest("Cart is empty.");
+
+        var variantIds = cartItems.Select(ci => ci.VariantId).ToList();
+        var variants = await _db.ProductVariants
+            .AsNoTracking()
+            .Where(v => variantIds.Contains(v.VariantId) && v.Status == 1)
+            .ToListAsync(ct);
+
+        var subTotal = variants
+            .Join(cartItems, v => v.VariantId, ci => ci.VariantId, (v, ci) => v.Price * ci.Quantity)
+            .Sum();
+
+        // Apply promo discount preview
+        decimal discountAmount = 0m;
+        if (!string.IsNullOrWhiteSpace(promoCode))
+        {
+            var now = DateTime.UtcNow;
+            var promo = await _db.Promotions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.PromoCode == promoCode.Trim()
+                    && p.Status == 1
+                    && p.StartDate <= now
+                    && p.EndDate >= now, ct);
+
+            if (promo != null && promo.CurrentUsageCount < (promo.TotalUsageLimit ?? int.MaxValue))
+            {
+                discountAmount = promo.DiscountPercentage.HasValue
+                    ? subTotal * promo.DiscountPercentage.Value / 100
+                    : promo.DiscountAmount ?? 0m;
+            }
+        }
+
+        decimal shippingFee;
+        try
+        {
+            shippingFee = await _ghn.CalculateFeeAsync(toDistrictId, toWardCode, subTotal, ct);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(502, new { message = "Could not retrieve shipping fee from GHN.", detail = ex.Message });
+        }
+
+        return Ok(new
+        {
+            subTotal,
+            discountAmount,
+            shippingFee,
+            estimatedTotal = subTotal + shippingFee - discountAmount
+        });
+    }
+
+    /// <summary>
     /// Create an order from the current session cart, validate stock and (if needed) prescription compatibility,
     /// then snapshot prescription into the order and clear the cart.
     /// </summary>
@@ -97,11 +170,38 @@ public class CheckoutController : ControllerBase
     {
         var userId = GetUserIdOrThrow();
 
-        var address = await _db.UserAddresses
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.AddressId == request.AddressId && a.CustomerId == userId && a.Status == 1, ct);
+        // ── Resolve address and GHN location IDs ─────────────────────────────
+        // Customer can supply EITHER a saved AddressId OR (ToDistrictId + ToWardCode) directly.
+        UserAddress? address = null;
+        int ghnDistrictId;
+        string ghnWardCode;
 
-        if (address == null) return BadRequest("Invalid address.");
+        if (request.AddressId.HasValue)
+        {
+            address = await _db.UserAddresses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.AddressId == request.AddressId.Value
+                    && a.CustomerId == userId && a.Status == 1, ct);
+
+            if (address == null) return BadRequest("Invalid address.");
+
+            // Prefer GHN IDs stored on the address; fall back to request values if the address was saved without them
+            ghnDistrictId = address.GhnDistrictId ?? request.ToDistrictId
+                ?? 0;
+            ghnWardCode = address.GhnWardCode ?? request.ToWardCode ?? string.Empty;
+
+            if (ghnDistrictId == 0 || string.IsNullOrWhiteSpace(ghnWardCode))
+                return BadRequest("The saved address has no GHN district/ward IDs. Please provide toDistrictId and toWardCode directly.");
+        }
+        else if (request.ToDistrictId.HasValue && !string.IsNullOrWhiteSpace(request.ToWardCode))
+        {
+            ghnDistrictId = request.ToDistrictId.Value;
+            ghnWardCode = request.ToWardCode;
+        }
+        else
+        {
+            return BadRequest("Provide either addressId or both toDistrictId and toWardCode.");
+        }
 
         var cartItems = _cartService.GetCart();
         if (cartItems.Count == 0) return BadRequest("Cart is empty.");
@@ -250,7 +350,11 @@ public class CheckoutController : ControllerBase
             }
         }
 
-        var shippingFee = CalculateShippingFee(request.ShippingMethod);
+        var shippingFee = await _ghn.CalculateFeeAsync(
+            ghnDistrictId,
+            ghnWardCode,
+            Math.Min(subTotal, 5_000_000m),
+            ct);
         var total = subTotal + shippingFee - discountAmount;
 
         var order = new Order
@@ -304,13 +408,13 @@ public class CheckoutController : ControllerBase
         var shippingInfo = new ShippingInfo
         {
             OrderId = order.OrderId,
-            RecipientName = address.RecipientName ?? "",
-            PhoneNumber = address.PhoneNumber ?? "",
-            AddressLine = address.AddressLine ?? "",
-            City = address.City,
-            District = address.District,
-            Ward = null,
-            Note = address.Note,
+            RecipientName = address?.RecipientName ?? "",
+            PhoneNumber = address?.PhoneNumber ?? "",
+            AddressLine = address?.AddressLine ?? "",
+            City = address?.City,
+            District = address?.District,
+            Ward = address?.Ward,
+            Note = address?.Note,
             ShippingMethod = request.ShippingMethod ?? "Standard",
             CreatedAt = now,
             UpdatedAt = now
@@ -383,15 +487,5 @@ public class CheckoutController : ControllerBase
     private static string GenerateOrderNumber(DateTime nowUtc)
     {
         return $"OD{nowUtc:yyMMddHHmmssfff}";
-    }
-
-    private static decimal CalculateShippingFee(string? shippingMethod)
-    {
-        return shippingMethod?.ToUpper() switch
-        {
-            "EXPRESS" => 50000m,
-            "STANDARD" => 30000m,
-            _ => 30000m
-        };
     }
 }
