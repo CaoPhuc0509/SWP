@@ -61,6 +61,10 @@ public class OrderService : IOrderService
                 o.CreatedAt,
                 o.UpdatedAt,
                 ItemCount = o.Items.Count,
+                ReturnRequestId = o.ReturnRequests
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Select(r => (long?)r.ReturnRequestId)
+                    .FirstOrDefault(),
                 ShippingInfo = o.ShippingInfo == null ? null : new
                 {
                     o.ShippingInfo.TrackingNumber,

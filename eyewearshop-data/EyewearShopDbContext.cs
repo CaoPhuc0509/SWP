@@ -83,6 +83,7 @@ public class EyewearShopDbContext : DbContext
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.Property(x => x.Status).HasColumnName("status");
+            e.Property(x => x.AvatarUrl).HasColumnName("avatar_url").HasMaxLength(512);
 
             e.HasOne(x => x.Role)
                 .WithMany(r => r.Users)

@@ -18,6 +18,7 @@ using Microsoft.OpenApi.Models;
 using eyewearshop_service.Return;
 using VNPAY.Extensions;
 using eyewearshop_api.Services;
+using eyewearshop_service;
 
 namespace eyewearshop_api
 {
@@ -109,6 +110,8 @@ namespace eyewearshop_api
             builder.Services.Configure<VietQrSettings>(builder.Configuration.GetSection("VietQr"));
             builder.Services.Configure<MomoSettings>(builder.Configuration.GetSection("Momo"));
             builder.Services.Configure<VnPaySettings>(builder.Configuration.GetSection("VnPay"));
+            builder.Services.Configure<CloudflareR2Settings>(builder.Configuration.GetSection("CloudflareR2"));
+            builder.Services.AddSingleton<IR2StorageService, R2StorageService>();
 
             // VNPAY.NET client configuration (uses the same VnPay section)
             var vnpSection = builder.Configuration.GetSection("VnPay");
