@@ -721,7 +721,107 @@ public class ProductManagerController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(new { productId = product.ProductId, message = status == 0 ? "is deactivated" : "is activated" });
     }
+
+    /// <summary>
+    /// Upload an image for a product variant. Accepts multipart/form-data with field "file" (image/*, max 5 MB).
+    /// Optional int query params: sortOrder (default 0), isPrimary (default false).
+    /// </summary>
+    [HttpPost("{productId}/variants/{variantId}/images/upload")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult> UploadVariantImage(
+        [FromRoute] long productId,
+        [FromRoute] long variantId,
+        IFormFile file,
+        [FromQuery] int sortOrder = 0,
+        [FromQuery] bool isPrimary = false,
+        CancellationToken ct = default)
+    {
+        var variant = await _db.ProductVariants
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.VariantId == variantId && v.ProductId == productId, ct);
+
+        if (variant == null)
+            return NotFound("Variant not found.");
+
+        string url;
+        try
+        {
+            url = await _r2.UploadAsync(file, "products", ct);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        // If this image is marked primary, clear existing primary flag for the same product
+        if (isPrimary)
+        {
+            var existingPrimary = await _db.ProductImages
+                .Where(i => i.ProductId == productId && i.IsPrimary)
+                .ToListAsync(ct);
+            foreach (var img in existingPrimary)
+            {
+                img.IsPrimary = false;
+            }
+        }
+
+        var image = new ProductImage
+        {
+            ProductId = productId,
+            VariantId = variantId,
+            Url = url,
+            SortOrder = sortOrder,
+            IsPrimary = isPrimary,
+            Status = 1
+        };
+
+        _db.ProductImages.Add(image);
+        await _db.SaveChangesAsync(ct);
+
+        return CreatedAtAction(
+            nameof(GetProductDetail),
+            new { productId },
+            new
+            {
+                image.ImageId,
+                image.ProductId,
+                image.VariantId,
+                image.Url,
+                image.SortOrder,
+                image.IsPrimary,
+                image.Status
+            });
+    }
+
+    /// <summary>
+    /// Delete a product image by imageId. Removes both the DB record and the object from R2.
+    /// </summary>
+    [HttpDelete("{productId}/images/{imageId}")]
+    public async Task<ActionResult> DeleteProductImage(
+        [FromRoute] long productId,
+        [FromRoute] long imageId,
+        CancellationToken ct)
+    {
+        var image = await _db.ProductImages
+            .FirstOrDefaultAsync(i => i.ImageId == imageId && i.ProductId == productId, ct);
+
+        if (image == null)
+            return NotFound("Image not found.");
+
+        // Delete from R2
+        var objectKey = _r2.ExtractKeyFromUrl(image.Url);
+        if (objectKey != null)
+            await _r2.DeleteAsync(objectKey, ct);
+
+        _db.ProductImages.Remove(image);
+        await _db.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
 }
+
+
+
 
 public record CreateComboRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? ProductType, string? Specifications,
     // combo-specific fields
