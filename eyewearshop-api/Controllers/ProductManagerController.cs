@@ -143,7 +143,7 @@ public class ProductManagerController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new product (combo)
+    /// Create a new product (combo and sunglasses)
     /// </summary>
     [HttpPost("combo")]
     public async Task<ActionResult> CreateComboProduct([FromBody] CreateComboRequest request, CancellationToken ct)
@@ -421,8 +421,8 @@ public class ProductManagerController : ControllerBase
         if (product == null)
             return NotFound("Product not found");
 
-        if (product.ProductType != ProductTypes.Combo)
-            return Conflict("Product type mismatch. This product is not Combo.");
+        if (product.ProductType != ProductTypes.Combo && product.ProductType != ProductTypes.Sunglasses)
+            return Conflict("Product type mismatch. This product is not Combo or Sunglasses.");
 
         // Update common product fields
         product.ProductName = request.ProductName ?? product.ProductName;
