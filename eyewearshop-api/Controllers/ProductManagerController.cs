@@ -36,6 +36,12 @@ public class ProductManagerController : ControllerBase
                 p.Sku,
                 p.ProductType,
                 p.BasePrice,
+
+                PrimaryImage = p.Images
+                    .Where(i => i.IsPrimary && i.Status == 1)
+                    .Select(i => i.Url)
+                    .FirstOrDefault(),
+
                 VariantCount = p.Variants.Count,
                 p.Status,
                 p.CreatedAt
@@ -120,17 +126,27 @@ public class ProductManagerController : ControllerBase
             Variants = product.Variants.Select(v => new
             {
                 v.VariantId,
+                v.VariantSku,
                 v.Color,
                 v.Price,
+                v.BaseCurve,
+                v.Diameter,
+                v.RefractiveIndex,
                 v.StockQuantity,
                 v.PreOrderQuantity,
-                v.Status
+                v.Status,
+                v.ExpectedDateRestock
             }),
 
-            Images = product.Images.Select(i => new
+            Images = product.Images
+            .Where(i => i.Status == 1)
+            .OrderBy(i => i.SortOrder)
+            .Select(i => new
             {
                 i.ImageId,
-                i.IsPrimary
+                i.Url,
+                i.IsPrimary,
+                i.SortOrder
             }),
 
             Spec = spec,
