@@ -11,6 +11,8 @@ namespace eyewearshop_service.Interfaces
         Task ChangeReturnStatusAsync(long returnId, short newStatus, string role);
         
         Task<object> GetAllReturnRequestsAsync(
+            string? requestType,
+            short? status,
             int page,
             int pageSize,
             CancellationToken ct = default);

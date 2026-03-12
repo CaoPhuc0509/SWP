@@ -61,6 +61,10 @@ public class OrderService : IOrderService
                 o.CreatedAt,
                 o.UpdatedAt,
                 ItemCount = o.Items.Count,
+                ReturnRequestId = o.ReturnRequests
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Select(r => (long?)r.ReturnRequestId)
+                    .FirstOrDefault(),
                 ShippingInfo = o.ShippingInfo == null ? null : new
                 {
                     o.ShippingInfo.TrackingNumber,
@@ -445,6 +449,14 @@ public class OrderService : IOrderService
 
     private bool IsValidTransition(short current, short next, string role, Order order)
     {
+        // CUSTOMER
+        if (role == RoleNames.Customer)
+        {
+            return
+                (current == OrderStatuses.AwaitingPayment && next == OrderStatuses.Deleted) || // Soft-delete by customer
+                (current == OrderStatuses.Delivered && next == OrderStatuses.ReturnRequested); // Request return after delivery
+        }
+
         // SALES STAFF
         if (role == RoleNames.SalesSupport)
         {
@@ -452,70 +464,48 @@ public class OrderService : IOrderService
                 (current == OrderStatuses.Pending && next == OrderStatuses.Validated) ||
                 (current == OrderStatuses.Validated && next == OrderStatuses.Confirmed) ||
                 (current == OrderStatuses.Confirmed && next == OrderStatuses.Cancelled) ||
-                (current == OrderStatuses.Shipped && next == OrderStatuses.Completed) ||
-                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
-                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
+                (current == OrderStatuses.Shipped && next == OrderStatuses.Completed) ;
         }
 
         // OPERATION STAFF
         if (role == RoleNames.Operations)
         {
-            // PRESCRIPTION orders: Confirmed → Produced → Processing → Shipped → Delivered → Completed
-            if (order.OrderType == OrderTypes.Prescription)
+            // Decide workflow based on order type and item composition
+            var hasCombo = order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Combo);
+            var hasFrame = order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Frame);
+            var hasRxLens = order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.RxLens);
+
+            var needsProduced =
+                hasCombo ||
+                (hasFrame && hasRxLens);
+
+            // Manufacturing workflow: Prescription, PreOrderPrescription, or PreOrder that requires production
+            var isManufacturingWorkflow =
+                order.OrderType == OrderTypes.Prescription ||
+                order.OrderType == OrderTypes.PreOrderPrescription ||
+                (order.OrderType == OrderTypes.PreOrder && needsProduced);
+
+            if (isManufacturingWorkflow)
             {
+                // Confirmed → Processed → Produced → Shipped → Delivered → Completed
                 return
-                    (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
-                    (current == OrderStatuses.Produced && next == OrderStatuses.Processing) ||
-                    (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                    (current == OrderStatuses.Confirmed && next == OrderStatuses.Processed) ||
+                    (current == OrderStatuses.Processed && next == OrderStatuses.Produced) ||
+                    (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                     (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                     (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                    (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
-                    (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                    (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
             }
 
-            // PRE_ORDER orders: Check if items need Produced 
-            if (order.OrderType == OrderTypes.PreOrder)
-            {
-                bool needsProduced = 
-                    // Check if has Combo
-                    order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Combo) ||
-                    // Check if has both Frame AND RxLens
-                    (order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Frame) &&
-                     order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.RxLens));
-
-                if (needsProduced)
-                {
-                    // PRE_ORDER with manufacturing: Confirmed → Produced → Processing → Shipped → Delivered → Completed
-                    return
-                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
-                        (current == OrderStatuses.Produced && next == OrderStatuses.Processing) ||
-                        (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
-                        (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
-                        (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                        (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
-                        (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
-                }
-                else
-                {
-                    // PRE_ORDER without manufacturing: Confirmed → Processing → Shipped → Delivered → Completed
-                    return
-                        (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
-                        (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
-                        (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
-                        (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                        (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
-                        (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
-                }
-            }
-
-            // AVAILABLE orders: Confirmed → Processing → Shipped → Delivered → Completed
+            // Non-manufacturing workflow: PreOrder without production or Available
             return
-                (current == OrderStatuses.Confirmed && next == OrderStatuses.Processing) ||
-                (current == OrderStatuses.Processing && next == OrderStatuses.Shipped) ||
+                (current == OrderStatuses.Confirmed && next == OrderStatuses.Produced) ||
+                (current == OrderStatuses.Produced && next == OrderStatuses.Shipped) ||
                 (current == OrderStatuses.Shipped && next == OrderStatuses.Delivered) ||
                 (current == OrderStatuses.Delivered && next == OrderStatuses.Completed) ||
-                (current == OrderStatuses.ReturnApproved && next == OrderStatuses.ReturnProcessing) ||
-                (current == OrderStatuses.ReturnProcessing && next == OrderStatuses.ReturnCompleted);
+                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnApproved) ||
+                (current == OrderStatuses.ReturnRequested && next == OrderStatuses.ReturnRejected);
         }
 
         return false;

@@ -1,4 +1,6 @@
+using eyewearshop_api.Services;
 using eyewearshop_data;
+using eyewearshop_data.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,10 +14,12 @@ namespace eyewearshop_api.Controllers;
 public class ProductManagerController : ControllerBase
 {
     private readonly EyewearShopDbContext _db;
+    private readonly IR2StorageService _r2;
 
-    public ProductManagerController(EyewearShopDbContext db)
+    public ProductManagerController(EyewearShopDbContext db, IR2StorageService r2)
     {
         _db = db;
+        _r2 = r2;
     }
 
     /// <summary>
@@ -726,206 +730,205 @@ public class ProductManagerController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(new { productId = product.ProductId, message = status == 0 ? "is deactivated" : "is activated" });
     }
-}
 
-public record CreateComboRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? ProductType, string? Specifications,
-    // combo-specific fields
-    //rxlens fields
-    string? DesignType,
-    string? rxLensMaterial,
-    decimal? LensWidth,
-    decimal? MinSphere,
-    decimal? MaxSphere,
-    decimal? MinCylinder,
-    decimal? MaxCylinder,
-    decimal? MinAxis,
-    decimal? MaxAxis,
-    decimal? MinAdd,
-    decimal? MaxAdd,
-    bool? HasAntiReflective,
-    bool? HasBlueLightFilter,
-    bool? HasUVProtection,
-    bool? HasScratchResistant,
-    //frame fields
-    string? RimType,
-    string? FrameMaterial,
-    string? Shape,
-    decimal? Weight,
-    decimal? A,
-    decimal? B,
-    decimal? Dbl,
-    decimal? TempleLength,
-    decimal? FrameLensWidth,
-    string? HingeType,
-    bool? HasNosePads
-);
-public record CreateRxLensRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
-    // RxLensSpec fields
-    string? DesignType,
-    string? Material,
-    decimal? LensWidth,
-    decimal? MinSphere,
-    decimal? MaxSphere,
-    decimal? MinCylinder,
-    decimal? MaxCylinder,
-    decimal? MinAxis,
-    decimal? MaxAxis,
-    decimal? MinAdd,
-    decimal? MaxAdd,
-    bool? HasAntiReflective,
-    bool? HasBlueLightFilter,
-    bool? HasUVProtection,
-    bool? HasScratchResistant
-);
-public record CreateContactLensRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+    public record CreateComboRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? ProductType, string? Specifications,
+        // combo-specific fields
+        //rxlens fields
+        string? DesignType,
+        string? rxLensMaterial,
+        decimal? LensWidth,
+        decimal? MinSphere,
+        decimal? MaxSphere,
+        decimal? MinCylinder,
+        decimal? MaxCylinder,
+        decimal? MinAxis,
+        decimal? MaxAxis,
+        decimal? MinAdd,
+        decimal? MaxAdd,
+        bool? HasAntiReflective,
+        bool? HasBlueLightFilter,
+        bool? HasUVProtection,
+        bool? HasScratchResistant,
+        //frame fields
+        string? RimType,
+        string? FrameMaterial,
+        string? Shape,
+        decimal? Weight,
+        decimal? A,
+        decimal? B,
+        decimal? Dbl,
+        decimal? TempleLength,
+        decimal? FrameLensWidth,
+        string? HingeType,
+        bool? HasNosePads
+    );
+    public record CreateRxLensRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+        // RxLensSpec fields
+        string? DesignType,
+        string? Material,
+        decimal? LensWidth,
+        decimal? MinSphere,
+        decimal? MaxSphere,
+        decimal? MinCylinder,
+        decimal? MaxCylinder,
+        decimal? MinAxis,
+        decimal? MaxAxis,
+        decimal? MinAdd,
+        decimal? MaxAdd,
+        bool? HasAntiReflective,
+        bool? HasBlueLightFilter,
+        bool? HasUVProtection,
+        bool? HasScratchResistant
+    );
+    public record CreateContactLensRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
 
-    // ContactLensSpec fields
-    decimal? BaseCurve,
-    decimal? Diameter,
-    decimal? MinSphere,
-    decimal? MaxSphere,
-    decimal? MinCylinder,
-    decimal? MaxCylinder,
-    decimal? MinAxis,
-    decimal? MaxAxis,
-    string? LensType,
-    string? Material,
-    int? WaterContent,
-    int? OxygenPermeability,
-    int? ReplacementSchedule,
-    bool? IsToric,
-    bool? IsMultifocal
-);
-public record CreateFrameRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
-    // FrameSpec fields
-    string? RimType,
-    string? Material,
-    string? Shape,
-    decimal? Weight,
-    decimal? A,
-    decimal? B,
-    decimal? Dbl,
-    decimal? TempleLength,
-    decimal? LensWidth,
-    string? HingeType,
-    bool? HasNosePads
-);
-public record UpdateComboRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
-    // combo-specific fields
-    //rxlens fields
-    string? DesignType,
-    string? rxLensMaterial,
-    decimal? LensWidth,
-    decimal? MinSphere,
-    decimal? MaxSphere,
-    decimal? MinCylinder,
-    decimal? MaxCylinder,
-    decimal? MinAxis,
-    decimal? MaxAxis,
-    decimal? MinAdd,
-    decimal? MaxAdd,
-    bool? HasAntiReflective,
-    bool? HasBlueLightFilter,
-    bool? HasUVProtection,
-    bool? HasScratchResistant,
-    //frame fields
-    string? RimType,
-    string? FrameMaterial,
-    string? Shape,
-    decimal? Weight,
-    decimal? A,
-    decimal? B,
-    decimal? Dbl,
-    decimal? TempleLength,
-    decimal? FrameLensWidth,
-    string? HingeType,
-    bool? HasNosePads
-);
-public record UpdateLensRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
-    // RxLensSpec fields
-    string? DesignType,
-    string? Material,
-    decimal? LensWidth,
-    decimal? MinSphere,
-    decimal? MaxSphere,
-    decimal? MinCylinder,
-    decimal? MaxCylinder,
-    decimal? MinAxis,
-    decimal? MaxAxis,
-    decimal? MinAdd,
-    decimal? MaxAdd,
-    bool? HasAntiReflective,
-    bool? HasBlueLightFilter,
-    bool? HasUVProtection,
-    bool? HasScratchResistant
-);
-public record UpdateContactLensRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+        // ContactLensSpec fields
+        decimal? BaseCurve,
+        decimal? Diameter,
+        decimal? MinSphere,
+        decimal? MaxSphere,
+        decimal? MinCylinder,
+        decimal? MaxCylinder,
+        decimal? MinAxis,
+        decimal? MaxAxis,
+        string? LensType,
+        string? Material,
+        int? WaterContent,
+        int? OxygenPermeability,
+        int? ReplacementSchedule,
+        bool? IsToric,
+        bool? IsMultifocal
+    );
+    public record CreateFrameRequest(string ProductName, string Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+        // FrameSpec fields
+        string? RimType,
+        string? Material,
+        string? Shape,
+        decimal? Weight,
+        decimal? A,
+        decimal? B,
+        decimal? Dbl,
+        decimal? TempleLength,
+        decimal? LensWidth,
+        string? HingeType,
+        bool? HasNosePads
+    );
+    public record UpdateComboRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+        // combo-specific fields
+        //rxlens fields
+        string? DesignType,
+        string? rxLensMaterial,
+        decimal? LensWidth,
+        decimal? MinSphere,
+        decimal? MaxSphere,
+        decimal? MinCylinder,
+        decimal? MaxCylinder,
+        decimal? MinAxis,
+        decimal? MaxAxis,
+        decimal? MinAdd,
+        decimal? MaxAdd,
+        bool? HasAntiReflective,
+        bool? HasBlueLightFilter,
+        bool? HasUVProtection,
+        bool? HasScratchResistant,
+        //frame fields
+        string? RimType,
+        string? FrameMaterial,
+        string? Shape,
+        decimal? Weight,
+        decimal? A,
+        decimal? B,
+        decimal? Dbl,
+        decimal? TempleLength,
+        decimal? FrameLensWidth,
+        string? HingeType,
+        bool? HasNosePads
+    );
+    public record UpdateLensRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+        // RxLensSpec fields
+        string? DesignType,
+        string? Material,
+        decimal? LensWidth,
+        decimal? MinSphere,
+        decimal? MaxSphere,
+        decimal? MinCylinder,
+        decimal? MaxCylinder,
+        decimal? MinAxis,
+        decimal? MaxAxis,
+        decimal? MinAdd,
+        decimal? MaxAdd,
+        bool? HasAntiReflective,
+        bool? HasBlueLightFilter,
+        bool? HasUVProtection,
+        bool? HasScratchResistant
+    );
+    public record UpdateContactLensRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
 
-    // ContactLensSpec fields
-    decimal? BaseCurve,
-    decimal? Diameter,
-    decimal? MinSphere,
-    decimal? MaxSphere,
-    decimal? MinCylinder,
-    decimal? MaxCylinder,
-    decimal? MinAxis,
-    decimal? MaxAxis,
-    string? LensType,
-    string? Material,
-    int? WaterContent,
-    int? OxygenPermeability,
-    int? ReplacementSchedule,
-    bool? IsToric,
-    bool? IsMultifocal
-);
-public record UpdateFrameRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
-    // FrameSpec fields
-    string? RimType,
-    string? Material,
-    string? Shape,
-    decimal? Weight,
-    decimal? A,
-    decimal? B,
-    decimal? Dbl,
-    decimal? TempleLength,
-    decimal? LensWidth,
-    string? HingeType,
-    bool? HasNosePads
-);
-public record AddVariantRequest(
-    string? Color,
-    decimal Price,
-    int StockQuantity,
-    int PreOrderQuantity,
-    string VariantSku,
-    decimal? BaseCurve,
-    decimal? Diameter,
-    decimal? RefractiveIndex,
-    DateTime? ExpectedDateRestock
-);
-public record UpdateVariantRequest(
-    string? Color,
-    decimal Price,
-    int StockQuantity,
-    int PreOrderQuantity,
-    string VariantSku,
-    decimal? BaseCurve,
-    decimal? Diameter,
-    decimal? RefractiveIndex,
-    DateTime? ExpectedDateRestock,
-    short Status
-);
-public record VariantResponse(
-    long VariantId,
-    long ProductId,
-    string? Color,
-    decimal Price,
-    int StockQuantity,
-    int PreOrderQuantity,
-    string VariantSku,
-    decimal? BaseCurve,
-    decimal? Diameter,
-    decimal? RefractiveIndex,
-    DateTime? ExpectedDateRestock,
-    short Status
-);
+        // ContactLensSpec fields
+        decimal? BaseCurve,
+        decimal? Diameter,
+        decimal? MinSphere,
+        decimal? MaxSphere,
+        decimal? MinCylinder,
+        decimal? MaxCylinder,
+        decimal? MinAxis,
+        decimal? MaxAxis,
+        string? LensType,
+        string? Material,
+        int? WaterContent,
+        int? OxygenPermeability,
+        int? ReplacementSchedule,
+        bool? IsToric,
+        bool? IsMultifocal
+    );
+    public record UpdateFrameRequest(string? ProductName, string? Sku, string? Description, decimal? BasePrice, long? CategoryId, long? BrandId, string? Specifications,
+        // FrameSpec fields
+        string? RimType,
+        string? Material,
+        string? Shape,
+        decimal? Weight,
+        decimal? A,
+        decimal? B,
+        decimal? Dbl,
+        decimal? TempleLength,
+        decimal? LensWidth,
+        string? HingeType,
+        bool? HasNosePads
+    );
+    public record AddVariantRequest(
+        string? Color,
+        decimal Price,
+        int StockQuantity,
+        int PreOrderQuantity,
+        string VariantSku,
+        decimal? BaseCurve,
+        decimal? Diameter,
+        decimal? RefractiveIndex,
+        DateTime? ExpectedDateRestock
+    );
+    public record UpdateVariantRequest(
+        string? Color,
+        decimal Price,
+        int StockQuantity,
+        int PreOrderQuantity,
+        string VariantSku,
+        decimal? BaseCurve,
+        decimal? Diameter,
+        decimal? RefractiveIndex,
+        DateTime? ExpectedDateRestock,
+        short Status
+    );
+    public record VariantResponse(
+        long VariantId,
+        long ProductId,
+        string? Color,
+        decimal Price,
+        int StockQuantity,
+        int PreOrderQuantity,
+        string VariantSku,
+        decimal? BaseCurve,
+        decimal? Diameter,
+        decimal? RefractiveIndex,
+        DateTime? ExpectedDateRestock,
+        short Status
+    );

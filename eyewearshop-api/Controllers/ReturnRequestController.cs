@@ -15,11 +15,13 @@ public class ReturnRequestController : ControllerBase
 {   
     private readonly EyewearShopDbContext _db;
     private readonly IReturnService _returnService;
+    private readonly IOrderService _orderService;
 
-    public ReturnRequestController(EyewearShopDbContext db, IReturnService returnService)
+    public ReturnRequestController(EyewearShopDbContext db, IReturnService returnService, IOrderService orderService)
     {
         _db = db;
         _returnService = returnService;
+        _orderService = orderService;
     }
 
     public record CreateReturnRequestRequest(
@@ -107,11 +109,15 @@ public class ReturnRequestController : ControllerBase
     [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations}")]
     [HttpGet("all")]
     public async Task<ActionResult> GetAllReturnRequests(
+        [FromQuery] string? requestType,
+        [FromQuery] short? status,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
         var result = await _returnService.GetAllReturnRequestsAsync(
+            requestType,
+            status,
             page,
             pageSize,
             ct);
@@ -201,10 +207,11 @@ public class ReturnRequestController : ControllerBase
     /// Create a new return request for an order (order must be Delivered/Completed).
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = $"{RoleNames.Customer}")]
     public async Task<ActionResult> CreateReturnRequest([FromBody] CreateReturnRequestRequest request, CancellationToken ct)
     {
         var userId = GetUserIdOrThrow();
-
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
         // Validate request type
         if (!new[] { ReturnRequestTypes.Exchange, ReturnRequestTypes.Return, ReturnRequestTypes.Warranty }
             .Contains(request.RequestType.ToUpperInvariant()))
@@ -254,7 +261,7 @@ public class ReturnRequestController : ControllerBase
             CustomerId = userId,
             RequestType = request.RequestType.ToUpperInvariant(),
             RequestNumber = requestNumber,
-            Status = OrderStatuses.ReturnRequested,
+            Status = ReturnRequestStatuses.Requested,
             Reason = request.Reason,
             Description = request.Description,
             CreatedAt = now,
@@ -275,6 +282,10 @@ public class ReturnRequestController : ControllerBase
             });
         }
 
+        // Update order status directly on the already-tracked entity
+        order.Status = OrderStatuses.ReturnRequested;
+        order.UpdatedAt = DateTime.UtcNow;
+
         await _db.SaveChangesAsync(ct);
 
         return Ok(new
@@ -286,7 +297,7 @@ public class ReturnRequestController : ControllerBase
         });
     }
     [HttpPut("{id}/status")]
-    [Authorize(Roles = RoleNames.Admin)]
+    [Authorize(Roles = $"{RoleNames.SalesSupport},{RoleNames.Operations},{RoleNames.Admin}")]
     public async Task<IActionResult> ChangeStatus(long id, [FromBody] short newStatus)
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value;

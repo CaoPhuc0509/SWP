@@ -157,7 +157,14 @@ public class CatalogService : ICatalogService
                     .OrderByDescending(i => i.IsPrimary)
                     .ThenBy(i => i.SortOrder)
                     .Select(i => i.Url)
-                    .FirstOrDefault(),
+                    .FirstOrDefault()
+                    ?? p.Variants
+                        .Where(v => v.Status == 1)
+                        .SelectMany(v => v.Images.Where(i => i.Status == 1))
+                        .OrderByDescending(i => i.IsPrimary)
+                        .ThenBy(i => i.SortOrder)
+                        .Select(i => i.Url)
+                        .FirstOrDefault(),
                 MinVariantPrice = p.Variants.Where(v => v.Status == 1).Select(v => (decimal?)v.Price).Min(),
                 MaxVariantPrice = p.Variants.Where(v => v.Status == 1).Select(v => (decimal?)v.Price).Max(),
                 InStock = p.Variants.Any(v => v.Status == 1 && v.StockQuantity > 0),
@@ -214,7 +221,12 @@ public class CatalogService : ICatalogService
                         v.Price,
                         v.StockQuantity,
                         v.PreOrderQuantity,
-                        v.ExpectedDateRestock
+                        v.ExpectedDateRestock,
+                        Images = v.Images
+                            .Where(i => i.Status == 1)
+                            .OrderByDescending(i => i.IsPrimary)
+                            .ThenBy(i => i.SortOrder)
+                            .Select(i => new { i.ImageId, i.Url, i.SortOrder, i.IsPrimary })
                     }),
                 FrameSpec = p.FrameSpec == null ? null : new
                 {

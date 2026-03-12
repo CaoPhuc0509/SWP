@@ -13,6 +13,7 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public short Status { get; set; } = 1;
+    public string? AvatarUrl { get; set; }
 
     public Role Role { get; set; } = null!;
 }

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using eyewearshop_api.Services;
 using eyewearshop_data;
 using eyewearshop_data.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -13,10 +14,12 @@ namespace eyewearshop_api.Controllers;
 public class AccountController : ControllerBase
 {
     private readonly EyewearShopDbContext _db;
+    private readonly IR2StorageService _r2;
 
-    public AccountController(EyewearShopDbContext db)
+    public AccountController(EyewearShopDbContext db, IR2StorageService r2)
     {
         _db = db;
+        _r2 = r2;
     }
 
     public record UpdateProfileRequest(
@@ -45,6 +48,7 @@ public class AccountController : ControllerBase
                 u.PhoneNumber,
                 u.Gender,
                 u.DateOfBirth,
+                u.AvatarUrl,
                 u.CreatedAt,
                 u.UpdatedAt,
                 Role = u.Role.RoleName
@@ -93,6 +97,43 @@ public class AccountController : ControllerBase
             user.DateOfBirth,
             user.UpdatedAt
         });
+    }
+
+    /// <summary>
+    /// Upload or replace the current user's avatar. Accepts multipart/form-data with field "file" (image/*, max 5 MB).
+    /// </summary>
+    [HttpPost("avatar")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult> UploadAvatar(IFormFile file, CancellationToken ct)
+    {
+        var userId = GetUserIdOrThrow();
+
+        string url;
+        try
+        {
+            url = await _r2.UploadAsync(file, "avatars", ct);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == userId, ct);
+        if (user == null) return NotFound();
+
+        // Delete old avatar from R2 if one existed
+        if (!string.IsNullOrEmpty(user.AvatarUrl))
+        {
+            var oldKey = _r2.ExtractKeyFromUrl(user.AvatarUrl);
+            if (oldKey != null)
+                await _r2.DeleteAsync(oldKey, ct);
+        }
+
+        user.AvatarUrl = url;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { avatarUrl = url });
     }
 
     /// <summary>
