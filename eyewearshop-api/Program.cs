@@ -112,6 +112,8 @@ namespace eyewearshop_api
             builder.Services.Configure<VnPaySettings>(builder.Configuration.GetSection("VnPay"));
             builder.Services.Configure<CloudflareR2Settings>(builder.Configuration.GetSection("CloudflareR2"));
             builder.Services.AddSingleton<IR2StorageService, R2StorageService>();
+            builder.Services.Configure<GhnSettings>(builder.Configuration.GetSection("Ghn"));
+            builder.Services.AddHttpClient<IGhnShippingService, GhnShippingService>();
 
             // VNPAY.NET client configuration (uses the same VnPay section)
             var vnpSection = builder.Configuration.GetSection("VnPay");
