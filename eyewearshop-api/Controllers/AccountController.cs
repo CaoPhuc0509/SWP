@@ -156,6 +156,9 @@ public class AccountController : ControllerBase
                 a.AddressLine,
                 a.City,
                 a.District,
+                a.Ward,
+                a.GhnDistrictId,
+                a.GhnWardCode,
                 a.Note,
                 a.CreatedAt,
                 a.UpdatedAt
@@ -184,6 +187,9 @@ public class AccountController : ControllerBase
                 a.AddressLine,
                 a.City,
                 a.District,
+                a.Ward,
+                a.GhnDistrictId,
+                a.GhnWardCode,
                 a.Note,
                 a.CreatedAt,
                 a.UpdatedAt
@@ -221,6 +227,9 @@ public class AccountController : ControllerBase
             AddressLine = request.AddressLine.Trim(),
             City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim(),
             District = string.IsNullOrWhiteSpace(request.District) ? null : request.District.Trim(),
+            Ward = string.IsNullOrWhiteSpace(request.Ward) ? null : request.Ward.Trim(),
+            GhnDistrictId = request.GhnDistrictId,
+            GhnWardCode = string.IsNullOrWhiteSpace(request.GhnWardCode) ? null : request.GhnWardCode.Trim(),
             Note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim(),
             CreatedAt = now,
             UpdatedAt = now,
@@ -238,6 +247,9 @@ public class AccountController : ControllerBase
             address.AddressLine,
             address.City,
             address.District,
+            address.Ward,
+            address.GhnDistrictId,
+            address.GhnWardCode,
             address.Note,
             address.CreatedAt
         });
@@ -270,6 +282,9 @@ public class AccountController : ControllerBase
 
         address.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City?.Trim();
         address.District = string.IsNullOrWhiteSpace(request.District) ? null : request.District?.Trim();
+        address.Ward = string.IsNullOrWhiteSpace(request.Ward) ? null : request.Ward?.Trim();
+        address.GhnDistrictId = request.GhnDistrictId;
+        address.GhnWardCode = string.IsNullOrWhiteSpace(request.GhnWardCode) ? null : request.GhnWardCode?.Trim();
         address.Note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note?.Trim();
         address.UpdatedAt = DateTime.UtcNow;
 
@@ -283,13 +298,16 @@ public class AccountController : ControllerBase
             address.AddressLine,
             address.City,
             address.District,
+            address.Ward,
+            address.GhnDistrictId,
+            address.GhnWardCode,
             address.Note,
             address.UpdatedAt
         });
     }
 
     /// <summary>
-    /// Delete a saved shipping address (soft delete if used by past orders, otherwise hard delete).
+    /// Delete a saved shipping address (soft delete).
     /// </summary>
     [HttpDelete("addresses/{addressId:long}")]
     public async Task<ActionResult> DeleteAddress([FromRoute] long addressId, CancellationToken ct)
@@ -301,25 +319,8 @@ public class AccountController : ControllerBase
 
         if (address == null) return NotFound();
 
-        // Check if address is used in any orders
-        var hasOrders = await _db.Orders
-            .Include(o => o.ShippingInfo)
-            .AnyAsync(o => o.CustomerId == userId && 
-                o.ShippingInfo != null && 
-                o.ShippingInfo.AddressLine == address.AddressLine &&
-                o.ShippingInfo.PhoneNumber == address.PhoneNumber, ct);
-
-        if (hasOrders)
-        {
-            // Soft delete
-            address.Status = 0;
-            address.UpdatedAt = DateTime.UtcNow;
-        }
-        else
-        {
-            // Hard delete
-            _db.UserAddresses.Remove(address);
-        }
+        address.Status = 0;
+        address.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);
 
@@ -332,6 +333,9 @@ public class AccountController : ControllerBase
         string AddressLine,
         string? City,
         string? District,
+        string? Ward,
+        int? GhnDistrictId,
+        string? GhnWardCode,
         string? Note);
 
     public record UpdateAddressRequest(
@@ -340,6 +344,9 @@ public class AccountController : ControllerBase
         string? AddressLine,
         string? City,
         string? District,
+        string? Ward,
+        int? GhnDistrictId,
+        string? GhnWardCode,
         string? Note);
 
     private long GetUserIdOrThrow()
