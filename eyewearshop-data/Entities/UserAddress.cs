@@ -9,7 +9,15 @@ public class UserAddress
     public string? AddressLine { get; set; }
     public string? City { get; set; }
     public string? District { get; set; }
+    public string? Ward { get; set; }
     public string? Note { get; set; }
+
+    /// <summary>GHN district ID used for shipping fee calculation.</summary>
+    public int? GhnDistrictId { get; set; }
+
+    /// <summary>GHN ward code used for shipping fee calculation.</summary>
+    public string? GhnWardCode { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public short Status { get; set; } = 1;

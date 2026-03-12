@@ -27,9 +27,9 @@ public class CheckoutController : ControllerBase
     }
 
     public record CheckoutRequest(
-        long AddressId,
-        int ToDistrictId,
-        string ToWardCode,
+        long? AddressId,
+        int? ToDistrictId,
+        string? ToWardCode,
         long? PrescriptionId,
         string? PromoCode = null,
         string? ShippingMethod = null);
@@ -170,11 +170,38 @@ public class CheckoutController : ControllerBase
     {
         var userId = GetUserIdOrThrow();
 
-        var address = await _db.UserAddresses
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.AddressId == request.AddressId && a.CustomerId == userId && a.Status == 1, ct);
+        // ── Resolve address and GHN location IDs ─────────────────────────────
+        // Customer can supply EITHER a saved AddressId OR (ToDistrictId + ToWardCode) directly.
+        UserAddress? address = null;
+        int ghnDistrictId;
+        string ghnWardCode;
 
-        if (address == null) return BadRequest("Invalid address.");
+        if (request.AddressId.HasValue)
+        {
+            address = await _db.UserAddresses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.AddressId == request.AddressId.Value
+                    && a.CustomerId == userId && a.Status == 1, ct);
+
+            if (address == null) return BadRequest("Invalid address.");
+
+            // Prefer GHN IDs stored on the address; fall back to request values if the address was saved without them
+            ghnDistrictId = address.GhnDistrictId ?? request.ToDistrictId
+                ?? 0;
+            ghnWardCode = address.GhnWardCode ?? request.ToWardCode ?? string.Empty;
+
+            if (ghnDistrictId == 0 || string.IsNullOrWhiteSpace(ghnWardCode))
+                return BadRequest("The saved address has no GHN district/ward IDs. Please provide toDistrictId and toWardCode directly.");
+        }
+        else if (request.ToDistrictId.HasValue && !string.IsNullOrWhiteSpace(request.ToWardCode))
+        {
+            ghnDistrictId = request.ToDistrictId.Value;
+            ghnWardCode = request.ToWardCode;
+        }
+        else
+        {
+            return BadRequest("Provide either addressId or both toDistrictId and toWardCode.");
+        }
 
         var cartItems = _cartService.GetCart();
         if (cartItems.Count == 0) return BadRequest("Cart is empty.");
@@ -324,8 +351,8 @@ public class CheckoutController : ControllerBase
         }
 
         var shippingFee = await _ghn.CalculateFeeAsync(
-            request.ToDistrictId,
-            request.ToWardCode,
+            ghnDistrictId,
+            ghnWardCode,
             Math.Min(subTotal, 5_000_000m),
             ct);
         var total = subTotal + shippingFee - discountAmount;
@@ -381,13 +408,13 @@ public class CheckoutController : ControllerBase
         var shippingInfo = new ShippingInfo
         {
             OrderId = order.OrderId,
-            RecipientName = address.RecipientName ?? "",
-            PhoneNumber = address.PhoneNumber ?? "",
-            AddressLine = address.AddressLine ?? "",
-            City = address.City,
-            District = address.District,
-            Ward = null,
-            Note = address.Note,
+            RecipientName = address?.RecipientName ?? "",
+            PhoneNumber = address?.PhoneNumber ?? "",
+            AddressLine = address?.AddressLine ?? "",
+            City = address?.City,
+            District = address?.District,
+            Ward = address?.Ward,
+            Note = address?.Note,
             ShippingMethod = request.ShippingMethod ?? "Standard",
             CreatedAt = now,
             UpdatedAt = now
