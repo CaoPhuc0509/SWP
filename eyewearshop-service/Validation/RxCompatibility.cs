@@ -18,27 +18,27 @@ public static class RxCompatibility
 
         // Sphere
         if (OutOfRange(prescription.RightSphere, lens.MinSphere, lens.MaxSphere))
-            issues.Add("Right eye Sphere is outside the Rx lens supported range.");
+            issues.Add("Độ cận/loạn (Sphere) mắt phải nằm ngoài phạm vi hỗ trợ của tròng kính đã chọn.");
         if (OutOfRange(prescription.LeftSphere, lens.MinSphere, lens.MaxSphere))
-            issues.Add("Left eye Sphere is outside the Rx lens supported range.");
+            issues.Add("Độ cận/loạn (Sphere) mắt trái nằm ngoài phạm vi hỗ trợ của tròng kính đã chọn.");
 
         // Cylinder
         if (OutOfRange(prescription.RightCylinder, lens.MinCylinder, lens.MaxCylinder))
-            issues.Add("Right eye Cylinder is outside the Rx lens supported range.");
+            issues.Add("Độ loạn (Cylinder) mắt phải nằm ngoài phạm vi hỗ trợ của tròng kính đã chọn.");
         if (OutOfRange(prescription.LeftCylinder, lens.MinCylinder, lens.MaxCylinder))
-            issues.Add("Left eye Cylinder is outside the Rx lens supported range.");
+            issues.Add("Độ loạn (Cylinder) mắt trái nằm ngoài phạm vi hỗ trợ của tròng kính đã chọn.");
 
         // Axis (only validate if provided in prescription)
         if (OutOfRange(prescription.RightAxis, lens.MinAxis, lens.MaxAxis))
-            issues.Add("Right eye Axis is outside the Rx lens supported range.");
+            issues.Add("Trục loạn (Axis) mắt phải nằm ngoài phạm vi hỗ trợ của tròng kính đã chọn.");
         if (OutOfRange(prescription.LeftAxis, lens.MinAxis, lens.MaxAxis))
-            issues.Add("Left eye Axis is outside the Rx lens supported range.");
+            issues.Add("Trục loạn (Axis) mắt trái nằm ngoài phạm vi hỗ trợ của tròng kính đã chọn.");
 
         // Add (progressive/bifocal)
         if (OutOfRange(prescription.RightAdd, lens.MinAdd, lens.MaxAdd))
-            issues.Add("Right eye Add power is outside the Rx lens supported range.");
+            issues.Add("Độ cộng thêm (Add) mắt phải nằm ngoài phạm vi hỗ trợ của tròng kính đã chọn.");
         if (OutOfRange(prescription.LeftAdd, lens.MinAdd, lens.MaxAdd))
-            issues.Add("Left eye Add power is outside the Rx lens supported range.");
+            issues.Add("Độ cộng thêm (Add) mắt trái nằm ngoài phạm vi hỗ trợ của tròng kính đã chọn.");
 
         return issues;
     }
@@ -49,7 +49,7 @@ public static class RxCompatibility
 
         // Basic cut size check (very simplified): lens blank width must cover frame A size
         if (lens.LensWidth.HasValue && frame.A.HasValue && frame.A.Value > lens.LensWidth.Value)
-            issues.Add("Rx lens blank width is smaller than the frame A size (cannot cut lens to fit frame).");
+            issues.Add("Tròng kính đã chọn không phù hợp với kích thước gọng vì đường kính phôi tròng nhỏ hơn size A của gọng.");
 
         // Rimless drilling compatibility (simplified heuristic based on material name)
         if (IsRimless(frame))
@@ -60,7 +60,7 @@ public static class RxCompatibility
                             material.Contains("POLYCARBONATE");
 
             if (!drillSafe)
-                issues.Add("Rimless frames require drill-safe lenses (e.g., Trivex or Polycarbonate).");
+                issues.Add("Gọng khoan/rimless cần loại tròng phù hợp để khoan lắp, như Trivex hoặc Polycarbonate.");
         }
 
         return issues;
@@ -72,4 +72,3 @@ public static class RxCompatibility
         return rimType.Contains("RIMLESS");
     }
 }
-
