@@ -1,4 +1,6 @@
+using System.Drawing;
 using eyewearshop_data;
+using eyewearshop_data.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -198,26 +200,103 @@ public class RevenueManagerController : ControllerBase
         year ??= DateTime.UtcNow.Year;
         var top = limit ?? 10;
 
-        var data = await _db.OrderItems
+        var topVariants = await _db.OrderItems
             .AsNoTracking()
             .Where(oi =>
                 oi.Order.Status == 2 &&
                 oi.Status == 1 &&
                 oi.Order.CreatedAt.Month == month &&
                 oi.Order.CreatedAt.Year == year)
-                .GroupBy(oi => oi.VariantId)
-                .Select(g => new
-                {
-                    VariantId = g.Key,
-                    QuantitySold = g.Sum(x => x.Quantity),
-                    TotalRevenue = g.Sum(x => x.UnitPrice * x.Quantity),
-                    AvgPrice = g.Average(x => x.UnitPrice)
-                })
-                .OrderByDescending(x => x.TotalRevenue)
-                .Take(top)
-                .ToListAsync(ct);
+            .GroupBy(oi => oi.VariantId)
+            .Select(g => new
+            {
+                VariantId = g.Key,
+                QuantitySold = g.Sum(x => x.Quantity),
+                TotalRevenue = g.Sum(x => x.UnitPrice * x.Quantity),
+                AvgPrice = g.Average(x => x.UnitPrice)
+            })
+            .OrderByDescending(x => x.TotalRevenue)
+            .Take(top)
+            .ToListAsync(ct);
 
-        return Ok(data);
+        var variantIds = topVariants.Select(x => x.VariantId).ToList();
+
+        // B2: load full data
+        var variants = await _db.ProductVariants
+            .AsNoTracking()
+            .Where(v => variantIds.Contains(v.VariantId))
+            .Include(v => v.Product)
+                .ThenInclude(p => p.Brand)
+            .Include(v => v.Product)
+                .ThenInclude(p => p.Category)
+            .Include(v => v.Images)
+            .ToListAsync(ct);
+
+        // B3: merge lại
+        var result = topVariants.Select(tv =>
+        {
+            var v = variants.FirstOrDefault(x => x.VariantId == tv.VariantId);
+
+            return new
+            {
+                // FULL PRODUCT
+                Product = v?.Product == null ? null : new
+                {
+                    v.Product.ProductId,
+                    v.Product.ProductName,
+                    v.Product.Sku,
+                    v.Product.ProductType,
+                    v.Product.BasePrice,
+                    v.Product.Specifications,
+                    v.Product.Status,
+
+                    Brand = v.Product.Brand == null ? null : new
+                    {
+                        v.Product.Brand.BrandId,
+                        v.Product.Brand.BrandName
+                    },
+
+                    Category = v.Product.Category == null ? null : new
+                    {
+                        v.Product.Category.CategoryId,
+                        v.Product.Category.CategoryName
+                    }
+                },
+
+                // FULL VARIANT
+                Variant = v == null ? null : new
+                {
+                    v.VariantId,
+                    v.VariantSku,
+                    v.Color,
+                    v.Price,
+                    v.BaseCurve,
+                    v.Diameter,
+                    v.RefractiveIndex,
+                    v.StockQuantity,
+                    v.PreOrderQuantity,
+                    v.ExpectedDateRestock,
+                    v.Status,
+
+                    // lấy ảnh primary
+                    Image = v.Images
+                        .Where(i => i.IsPrimary)
+                        .Select(i => new
+                        {
+                            i.ImageId,
+                            i.Url
+                        })
+                        .FirstOrDefault()
+                },
+
+                // stats
+                tv.QuantitySold,
+                tv.TotalRevenue,
+                tv.AvgPrice
+            };
+        });
+
+        return Ok(result);
     }
 
 
