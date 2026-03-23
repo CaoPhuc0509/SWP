@@ -123,7 +123,7 @@ public class PaymentController : ControllerBase
         // After successful processing, redirect browser to frontend result page with orderId
         if (orderId.HasValue)
         {
-            var target = $"http://localhost:5173/payment/vnpay/result?orderId={orderId.Value}";
+            var target = $"https://eyewearshop-ten.vercel.app/payment/vnpay/result?orderId={orderId.Value}";
             return Redirect(target);
         }
 
