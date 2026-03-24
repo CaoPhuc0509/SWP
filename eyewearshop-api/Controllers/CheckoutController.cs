@@ -34,6 +34,19 @@ public class CheckoutController : ControllerBase
         string? PromoCode = null,
         string? ShippingMethod = null);
 
+    public record PrescriptionCompatibilityRequest(
+        long? PrescriptionId,
+        decimal? RightSphere,
+        decimal? RightCylinder,
+        decimal? RightAxis,
+        decimal? RightAdd,
+        decimal? RightPD,
+        decimal? LeftSphere,
+        decimal? LeftCylinder,
+        decimal? LeftAxis,
+        decimal? LeftAdd,
+        decimal? LeftPD);
+
     /// <summary>
     /// Business rule: customer must provide a prescription ONLY when the cart contains BOTH a Frame and an RxLens.
     /// </summary>
@@ -158,6 +171,149 @@ public class CheckoutController : ControllerBase
             discountAmount,
             shippingFee,
             estimatedTotal = subTotal + shippingFee - discountAmount
+        });
+    }
+
+    /// <summary>
+    /// Check compatibility between FrameSpec and RxLensSpec in current session cart.
+    /// Requires cart to contain both Frame and RxLens products.
+    /// </summary>
+    [HttpGet("compatibility/frame-rxlens")]
+    public async Task<ActionResult> CheckFrameRxLensCompatibility(CancellationToken ct)
+    {
+        await HttpContext.Session.LoadAsync(ct);
+        var cartItems = _cartService.GetCart();
+        if (cartItems.Count == 0)
+            return BadRequest("Cart is empty.");
+
+        var variantIds = cartItems.Select(ci => ci.VariantId).ToList();
+        var variants = await _db.ProductVariants
+            .AsNoTracking()
+            .Where(v => variantIds.Contains(v.VariantId) && v.Status == 1)
+            .Include(v => v.Product)
+            .ThenInclude(p => p.FrameSpec)
+            .Include(v => v.Product)
+            .ThenInclude(p => p.RxLensSpec)
+            .ToListAsync(ct);
+
+        if (variants.Count != variantIds.Count)
+            return BadRequest("Some variants are no longer available.");
+
+        var cartItemsWithProducts = cartItems
+            .Join(variants, ci => ci.VariantId, v => v.VariantId, (ci, v) => new { CartItem = ci, Variant = v })
+            .ToList();
+
+        var frameSpecs = cartItemsWithProducts
+            .Where(x => x.Variant.Product.ProductType == ProductTypes.Frame)
+            .Select(x => x.Variant.Product.FrameSpec)
+            .Where(s => s != null)
+            .DistinctBy(s => s!.ProductId)
+            .Select(s => s!)
+            .ToList();
+
+        var rxLensSpecs = cartItemsWithProducts
+            .Where(x => x.Variant.Product.ProductType == ProductTypes.RxLens)
+            .Select(x => x.Variant.Product.RxLensSpec)
+            .Where(s => s != null)
+            .DistinctBy(s => s!.ProductId)
+            .Select(s => s!)
+            .ToList();
+
+        if (frameSpecs.Count == 0 || rxLensSpecs.Count == 0)
+            return BadRequest("Cart must contain both Frame and RxLens products.");
+
+        var issues = new List<string>();
+        foreach (var frameSpec in frameSpecs)
+        {
+            foreach (var lensSpec in rxLensSpecs)
+            {
+                issues.AddRange(RxCompatibility.ValidateFrameLensCompatibility(frameSpec, lensSpec));
+            }
+        }
+
+        return Ok(new
+        {
+            IsCompatible = issues.Count == 0,
+            Issues = issues
+        });
+    }
+
+    /// <summary>
+    /// Check compatibility between user-provided prescription values and RxLensSpec in current session cart.
+    /// Requires cart to contain at least one RxLens product.
+    /// </summary>
+    [HttpPost("compatibility/prescription-rxlens")]
+    public async Task<ActionResult> CheckPrescriptionRxLensCompatibility(
+        [FromBody] PrescriptionCompatibilityRequest request,
+        CancellationToken ct)
+    {
+        await HttpContext.Session.LoadAsync(ct);
+        var cartItems = _cartService.GetCart();
+        if (cartItems.Count == 0)
+            return BadRequest("Cart is empty.");
+
+        var variantIds = cartItems.Select(ci => ci.VariantId).ToList();
+        var variants = await _db.ProductVariants
+            .AsNoTracking()
+            .Where(v => variantIds.Contains(v.VariantId) && v.Status == 1)
+            .Include(v => v.Product)
+            .ThenInclude(p => p.RxLensSpec)
+            .ToListAsync(ct);
+
+        if (variants.Count != variantIds.Count)
+            return BadRequest("Some variants are no longer available.");
+
+        var rxLensSpecs = variants
+            .Where(v => v.Product.ProductType == ProductTypes.RxLens)
+            .Select(v => v.Product.RxLensSpec)
+            .Where(s => s != null)
+            .DistinctBy(s => s!.ProductId)
+            .Select(s => s!)
+            .ToList();
+
+        if (rxLensSpecs.Count == 0)
+            return BadRequest("Cart must contain at least one RxLens product.");
+
+        Prescription? prescription;
+        if (request.PrescriptionId.HasValue)
+        {
+            var userId = GetUserIdOrThrow();
+            prescription = await _db.Prescriptions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.PrescriptionId == request.PrescriptionId.Value
+                                          && p.CustomerId == userId
+                                          && p.Status == 1, ct);
+
+            if (prescription == null)
+                return BadRequest("Invalid prescriptionId.");
+        }
+        else
+        {
+            prescription = new Prescription
+            {
+                RightSphere = request.RightSphere,
+                RightCylinder = request.RightCylinder,
+                RightAxis = request.RightAxis,
+                RightAdd = request.RightAdd,
+                RightPD = request.RightPD,
+                LeftSphere = request.LeftSphere,
+                LeftCylinder = request.LeftCylinder,
+                LeftAxis = request.LeftAxis,
+                LeftAdd = request.LeftAdd,
+                LeftPD = request.LeftPD
+            };
+        }
+
+        var issues = new List<string>();
+        foreach (var lensSpec in rxLensSpecs)
+        {
+            issues.AddRange(RxCompatibility.ValidatePrescriptionAgainstLens(prescription, lensSpec));
+        }
+
+        return Ok(new
+        {
+            IsCompatible = issues.Count == 0,
+            Issues = issues
         });
     }
 

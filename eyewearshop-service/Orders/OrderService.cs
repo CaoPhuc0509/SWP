@@ -155,7 +155,13 @@ public class OrderService : IOrderService
                             oi.Variant.Product.ProductId,
                             oi.Variant.Product.ProductName,
                             oi.Variant.Product.Sku,
-                            oi.Variant.Product.ProductType
+                            oi.Variant.Product.ProductType,
+                            ImageUrl = oi.Variant.Product.Images
+                                .Where(img => img.Status == 1 && (img.VariantId == oi.Variant.VariantId || img.VariantId == null))
+                                .OrderByDescending(img => img.IsPrimary)
+                                .ThenBy(img => img.SortOrder)
+                                .Select(img => img.Url)
+                                .FirstOrDefault()
                         }
                     }
                 }),
