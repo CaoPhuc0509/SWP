@@ -96,7 +96,8 @@ public class CheckoutController : ControllerBase
             .Distinct()
             .ToList();
 
-        var requiresPrescription = CartContainsFrameAndRxLens(productTypes);
+        var requiresPrescription = CartContainsFrameAndRxLens(productTypes)
+            || productTypes.Contains(ProductTypes.Combo);
 
         return Ok(new
         {
