@@ -96,7 +96,8 @@ public class CheckoutController : ControllerBase
             .Distinct()
             .ToList();
 
-        var requiresPrescription = CartContainsFrameAndRxLens(productTypes);
+        var requiresPrescription = CartContainsFrameAndRxLens(productTypes)
+            || productTypes.Contains(ProductTypes.Combo);
 
         return Ok(new
         {
@@ -240,7 +241,7 @@ public class CheckoutController : ControllerBase
 
     /// <summary>
     /// Check compatibility between user-provided prescription values and RxLensSpec in current session cart.
-    /// Requires cart to contain at least one RxLens product.
+    /// Requires cart to contain at least one RxLens product, or a Combo product that includes an RxLens.
     /// </summary>
     [HttpPost("compatibility/prescription-rxlens")]
     public async Task<ActionResult> CheckPrescriptionRxLensCompatibility(
@@ -263,8 +264,11 @@ public class CheckoutController : ControllerBase
         if (variants.Count != variantIds.Count)
             return BadRequest("Some variants are no longer available.");
 
+        // Collect RxLensSpecs from standalone RxLens products AND from Combo products
+        // (a Combo product has its own RxLensSpec stored directly on the Product record)
         var rxLensSpecs = variants
-            .Where(v => v.Product.ProductType == ProductTypes.RxLens)
+            .Where(v => v.Product.ProductType == ProductTypes.RxLens
+                     || v.Product.ProductType == ProductTypes.Combo)
             .Select(v => v.Product.RxLensSpec)
             .Where(s => s != null)
             .DistinctBy(s => s!.ProductId)
@@ -272,7 +276,7 @@ public class CheckoutController : ControllerBase
             .ToList();
 
         if (rxLensSpecs.Count == 0)
-            return BadRequest("Cart must contain at least one RxLens product.");
+            return BadRequest("Cart must contain at least one RxLens product (or a Combo that includes an RxLens spec).");
 
         Prescription? prescription;
         if (request.PrescriptionId.HasValue)
