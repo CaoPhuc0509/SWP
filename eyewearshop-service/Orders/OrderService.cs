@@ -448,7 +448,30 @@ public class OrderService : IOrderService
         if (!IsValidTransition(order.Status, newStatus, role, order))
             throw new Exception("You are not allowed to change this order status");
 
+        var shouldDeductStockOnValidation =
+            order.Status == OrderStatuses.Pending &&
+            newStatus == OrderStatuses.Validated &&
+            (order.OrderType == OrderTypes.PreOrder || order.OrderType == OrderTypes.PreOrderPrescription);
+
+        if (shouldDeductStockOnValidation)
+        {
+            var now = DateTime.UtcNow;
+
+            foreach (var item in order.Items)
+            {
+                if (item.Variant == null)
+                    throw new Exception($"Variant not found for order item {item.OrderItemId}");
+
+                if (item.Variant.StockQuantity < item.Quantity)
+                    throw new Exception($"Not enough stock for variant {item.Variant.VariantId}");
+
+                item.Variant.StockQuantity -= item.Quantity;
+                item.Variant.UpdatedAt = now;
+            }
+        }
+
         order.Status = newStatus;
+        order.UpdatedAt = DateTime.UtcNow;
 
         await _orderRepository.SaveChangesAsync();
     }
