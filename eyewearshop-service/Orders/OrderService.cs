@@ -417,6 +417,8 @@ public class OrderService : IOrderService
     {
         var order = await _orderRepository
             .Query()
+            .Include(o => o.Items)
+            .ThenInclude(oi => oi.Variant)
             .FirstOrDefaultAsync(o => o.OrderId == orderId && o.CustomerId == customerId, ct);
 
         if (order == null) return (false, "Order not found.", 404);
@@ -426,8 +428,32 @@ public class OrderService : IOrderService
             return (false, "Only unpaid orders awaiting payment can be deleted.", 400);
         }
 
+        // Restore the reserved quantity for each item based on order type:
+        //   Available / Prescription        → was deducted from StockQuantity
+        //   PreOrder  / PreOrderPrescription → was deducted from PreOrderQuantity
+        var isPreOrderType =
+            order.OrderType == OrderTypes.PreOrder ||
+            order.OrderType == OrderTypes.PreOrderPrescription;
+
+        var now = DateTime.UtcNow;
+        foreach (var item in order.Items)
+        {
+            if (item.Variant == null) continue;
+
+            if (isPreOrderType)
+            {
+                item.Variant.PreOrderQuantity += item.Quantity;
+            }
+            else
+            {
+                // Available or Prescription
+                item.Variant.StockQuantity += item.Quantity;
+            }
+            item.Variant.UpdatedAt = now;
+        }
+
         order.Status = OrderStatuses.Deleted;
-        order.UpdatedAt = DateTime.UtcNow;
+        order.UpdatedAt = now;
 
         await _orderRepository.SaveChangesAsync(ct);
         return (true, null, 200);

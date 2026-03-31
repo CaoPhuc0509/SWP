@@ -612,17 +612,19 @@ public class CheckoutController : ControllerBase
                 Status = 1
             });
 
-            // Update stock
+            // Deduct inventory based on order type:
+            //   Available / Prescription        → deduct StockQuantity now (fulfilled from current stock)
+            //   PreOrder  / PreOrderPrescription → deduct PreOrderQuantity now (reserve the pre-order slot);
+            //                                      StockQuantity is deducted later when staff validates the order.
             var variant = item.Variant;
-            if (item.CartItem.Quantity <= variant.StockQuantity)
+            if (orderType == OrderTypes.Available || orderType == OrderTypes.Prescription)
             {
                 variant.StockQuantity -= item.CartItem.Quantity;
             }
             else
             {
-                var stockUsed = variant.StockQuantity;
-                variant.StockQuantity = 0;
-                variant.PreOrderQuantity -= (item.CartItem.Quantity - stockUsed);
+                // PreOrder / PreOrderPrescription: reserve pre-order slot only
+                variant.PreOrderQuantity -= item.CartItem.Quantity;
             }
             variant.UpdatedAt = now;
         }
