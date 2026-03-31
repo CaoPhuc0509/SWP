@@ -462,14 +462,20 @@ public class CheckoutController : ControllerBase
             item.CartItem.Quantity > item.Variant.StockQuantity &&
             item.Variant.PreOrderQuantity > 0);
 
+        // Combo products always require the prescription-tier order types:
+        // Combo + StockQuantity  → Prescription
+        // Combo + PreOrderQuantity → PreOrderPrescription
+        var hasCombo = cartItemsWithProducts.Any(x => x.Variant.Product.ProductType == ProductTypes.Combo);
+
         string orderType;
-        if (requiresPrescription && usesPreOrderQuantity)
+        if ((requiresPrescription || hasCombo) && usesPreOrderQuantity)
         {
-            // Both prescription is required and some quantity must be fulfilled via pre-order
+            // Prescription or Combo order where some quantity must be fulfilled via pre-order
             orderType = OrderTypes.PreOrderPrescription;
         }
-        else if (requiresPrescription)
+        else if (requiresPrescription || hasCombo)
         {
+            // Prescription or Combo order fulfilled entirely from stock
             orderType = OrderTypes.Prescription;
         }
         else if (usesPreOrderQuantity)
