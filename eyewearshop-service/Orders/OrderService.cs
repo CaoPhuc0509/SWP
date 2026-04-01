@@ -504,6 +504,11 @@ public class OrderService : IOrderService
 
     private bool IsValidTransition(short current, short next, string role, Order order)
     {
+        var canCancelFromCurrentStatus =
+            next == OrderStatuses.Cancelled &&
+            current != OrderStatuses.Cancelled &&
+            current != OrderStatuses.Deleted;
+
         // CUSTOMER
         if (role == RoleNames.Customer)
         {
@@ -515,6 +520,9 @@ public class OrderService : IOrderService
         // SALES STAFF
         if (role == RoleNames.SalesSupport)
         {
+            if (canCancelFromCurrentStatus)
+                return true;
+
             return
                 (current == OrderStatuses.Pending && next == OrderStatuses.Validated) ||
                 (current == OrderStatuses.Validated && next == OrderStatuses.Confirmed) ||
@@ -525,6 +533,9 @@ public class OrderService : IOrderService
         // OPERATION STAFF
         if (role == RoleNames.Operations)
         {
+            if (canCancelFromCurrentStatus)
+                return true;
+
             // Decide workflow based on order type and item composition
             var hasCombo = order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Combo);
             var hasFrame = order.Items.Any(oi => oi.Variant?.Product?.ProductType == ProductTypes.Frame);
